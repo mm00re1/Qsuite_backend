@@ -11,18 +11,18 @@ def sendKdbQuery(kdbFunction, host, port, *args):
     q.open()
     try:
         response = q.sendSync(kdbFunction, *args)
-        #if res is not a boolean
-        print("kdb response")
-        print(response)
-        print(type(response))
-        print(type(response) is np.bool_)
+        #if res is a boolean
         if type(response) is np.bool_:
             if response:
                 res = {"success": True, "data": "", "message": "Test Ran Successfully"}
             else:
                 res = {"success": False, "data": "", "message": "Test Failed"}
         else:
-            res = {"success": False, "data": str(response), "message": "Response Preview"}
+            string_response = str(response)
+            if len(string_response) > 400:
+                string_response = string_response[:400] + "......"
+            res = {"success": False, "data": string_response, "message": "Response Preview"}
+
     except Exception as e:
         res = {"success":False, "data": "", "message": "Kdb Error => " + str(e)}
     q.close() 
