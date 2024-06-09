@@ -4,19 +4,18 @@ from datetime import datetime, timedelta
 import time
 from flask_cors import CORS
 from KdbSubs import *
-from flask_migrate import Migrate
+from math import ceil
+from sqlalchemy import asc, desc
 
 app = Flask(__name__)
 CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test_platform.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
-migrate = Migrate(app, db)  # Initialize Flask-Migrate
-
 
 kdb_host = "localhost"
 kdb_port = 5001
-
+PAGE_SIZE = 50
 
 class TestCase(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -80,13 +79,13 @@ def get_unique_dates():
 
     start_date = cache['start_date']
     latest_date = cache['latest_date']
-    missing_dates_str = [date.strftime('%d-%m-%Y') for date in cache['missing_dates']]
+    missing_dates_str = [date.strftime('%Y-%m-%d') for date in cache['missing_dates']]
 
-    print(start_date.strftime('%d-%m-%Y'))
-    print(latest_date.strftime('%d-%m-%Y'))
+    print(start_date.strftime('%Y-%m-%d'))
+    print(latest_date.strftime('%Y-%m-%d'))
     return jsonify({
-        "start_date": start_date.strftime('%d-%m-%Y'),
-        "latest_date": latest_date.strftime('%d-%m-%Y'),
+        "start_date": start_date.strftime('%Y-%m-%d'),
+        "latest_date": latest_date.strftime('%Y-%m-%d'),
         "missing_dates": missing_dates_str
     }), 200
 
@@ -221,9 +220,10 @@ def get_test_results_30_days():
 @app.route('/get_test_results_by_day/', methods=['GET'])
 def get_test_results_by_day():
     stTime = time.time()
-    print("stTime: ", stTime)
     date_str = request.args.get('date')
     group_id = request.args.get('group_id')
+    page_number = request.args.get('page_number', 1, type=int)
+    sort_option = request.args.get('sortOption', '')  # Get sort option, default is empty string
 
     # Convert date from DD-MM-YYYY to YYYY-MM-DD for SQL compatibility
     try:
@@ -238,6 +238,19 @@ def get_test_results_by_day():
     if group_id:
         query = query.filter(TestCase.group_id == group_id)
 
+    # Apply sorting based on sortOption
+    if sort_option == 'Failed':
+        print("Failed")
+        query = query.order_by(desc(TestResult.pass_status == False))
+    elif sort_option == 'Passed':
+        print("Passed")
+        query = query.order_by(desc(TestResult.pass_status == True))
+    elif sort_option == 'Time Taken':
+        query = query.order_by(desc(TestResult.time_taken))
+
+    total_results = query.count()  # Get the total number of results for pagination
+
+    query = query.offset((page_number - 1) * PAGE_SIZE).limit(PAGE_SIZE)
     results = query.all()
     print("timeTaken for db query: ", time.time() - stTime)
     stTime = time.time()
@@ -247,17 +260,23 @@ def get_test_results_by_day():
         results_data.append({
             'id': result.id,
             'test_case_id': result.test_case_id,
-            'test_name': result.test_case.test_name,
-            'time_taken': result.time_taken,
-            'pass_status': result.pass_status,
+            'Test Name': result.test_case.test_name,
+            'Time Taken': result.time_taken,
+            'Status': result.pass_status,
             'error_message': result.error_message,
             'group_id': result.test_case.group.id,  # Return group ID
             'group_name': result.test_case.group.name  # Return group name
         })
 
-    print("timeTaken to format result: ", time.time() - stTime)
-
-    return jsonify(results_data), 200
+    column_list = ["Test Name", "Time Taken", "Status"]
+    total_pages = ceil(total_results / PAGE_SIZE)
+    print("timeTaken to format result: ", time.time() - stTime)    
+    return jsonify({
+        "test_run_data": results_data,
+        "columnList": column_list,
+        "total_pages": total_pages,
+        "current_page": page_number
+    }), 200
 
 @app.route('/get_test_result_summary/', methods=['GET'])
 def get_test_result_summary():
@@ -297,16 +316,18 @@ def get_test_result_summary():
         group_summary = summary_dict.get(group.id, {'passed': 0, 'failed': 0})
         groups_data.append({
             "id": group.id,
-            "name": group.name,
-            "server": group.server,
-            "port": group.port,
-            "schedule": group.schedule,
-            "passed": group_summary['passed'],
-            "failed": group_summary['failed']
+            "Name": group.name,
+            "Machine": group.server,
+            "Port": group.port,
+            "Scheduled": group.schedule,
+            "Passed": group_summary['passed'],
+            "Failed": group_summary['failed']
         })
 
+    column_list = ["Name", "Machine", "Port", "Scheduled", "Passed", "Failed"]
     print("Total time taken: ", time.time() - stTime)
-    return jsonify(groups_data), 200
+
+    return jsonify({"groups_data": groups_data, "columnList": column_list}), 200
 
 @app.route('/executeQcode/', methods=['POST'])
 def execute_q_code():
