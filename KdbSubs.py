@@ -6,6 +6,12 @@ from qpython.qcollection import QTable
 from queue import Queue
 import numpy as np
 
+def wrapQcode(code):
+    qFunction = '{[] ' + ''.join(code) + '}'  # Join the lines of code into a single line inside a function
+    #print(qFunction)
+    #block from parsing result greater than 1MB in size, users can view head of result if necessary ie 10#table
+    return "{[] response: " + qFunction + "[]; $[1000000 < -22!response; \"can't return preview of objects this large\"; response]}"
+
 def sendKdbQuery(kdbFunction, host, port, *args):
     q = QConnection(host=host, port=port, timeout = 10)
     q.open()
