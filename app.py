@@ -1,46 +1,22 @@
 from flask import Flask, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 import time
 from flask_cors import CORS
 from KdbSubs import *
 from math import ceil
 from sqlalchemy import asc, desc
+from models import db, TestCase, TestResult, TestGroup  # Importing models and db from models.py
 
 app = Flask(__name__)
 CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test_platform.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
+db.init_app(app)  # Initialize db with the app
 
 kdb_host = "localhost"
 kdb_port = 5001
 PAGE_SIZE = 50
 
-class TestCase(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey('test_group.id'), nullable=False)
-    test_name = db.Column(db.String(50), nullable=False)
-    test_code = db.Column(db.Text, nullable=False)
-    creation_date = db.Column(db.DateTime, default=datetime.utcnow)
-    group = db.relationship('TestGroup', backref=db.backref('test_cases', lazy=True))
-
-class TestResult(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    test_case_id = db.Column(db.Integer, db.ForeignKey('test_case.id'), nullable=False)
-    group_id = db.Column(db.Integer, db.ForeignKey('test_group.id'), nullable=False)  # Added group_id
-    test_case = db.relationship('TestCase', backref=db.backref('results', lazy=True))
-    date_run = db.Column(db.Date, nullable=False, default=datetime.utcnow, index=True)
-    time_taken = db.Column(db.Float, nullable=False)
-    pass_status = db.Column(db.Boolean, nullable=False)
-    error_message = db.Column(db.Text, nullable=True)
-
-class TestGroup(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), nullable=False, unique=True)
-    server = db.Column(db.String(100), nullable=False)
-    port = db.Column(db.Integer, nullable=False)
-    schedule = db.Column(db.String(100), nullable=True)
 
 cache = {
     'unique_dates': [],
@@ -95,6 +71,7 @@ def add_test_case():
     start_time = time.time()
     data = request.json
     group_id = data.get('group_id')
+    dependencies = data.get('dependencies', [])  # Get dependencies from the request, default to an empty list
 
     # Check if the group_id is provided
     if not group_id:
@@ -113,6 +90,13 @@ def add_test_case():
     )
     db.session.add(new_test_case)
     db.session.commit()
+
+    # Add dependencies if any
+    for dep_id in dependencies:
+        dependency = TestDependency(test_id=new_test_case.id, dependent_test_id=dep_id)
+        db.session.add(dependency)
+    db.session.commit()
+
     print("time taken to add test case: ", time.time() - start_time)
     return jsonify({"message": "Test case added successfully", "id": new_test_case.id}), 201
 
@@ -272,11 +256,107 @@ def get_test_results_by_day():
     total_pages = ceil(total_results / PAGE_SIZE)
     print("timeTaken to format result: ", time.time() - stTime)    
     return jsonify({
-        "test_run_data": results_data,
+        "test_data": results_data,
         "columnList": column_list,
         "total_pages": total_pages,
         "current_page": page_number
     }), 200
+
+@app.route('/get_tests_by_group/', methods=['GET'])
+def get_tests_by_group():
+    stTime = time.time()
+    group_id = request.args.get('group_id')
+    page_number = request.args.get('page_number', 1, type=int)
+    
+    if not group_id:
+        return jsonify({"message": "Group ID is required"}), 400
+
+    query = db.session.query(TestCase).filter(TestCase.group_id == group_id)
+
+    total_results = query.count()  # Get the total number of results for pagination
+
+    query = query.offset((page_number - 1) * PAGE_SIZE).limit(PAGE_SIZE)
+    results = query.all()
+    print("timeTaken for db query: ", time.time() - stTime)
+    stTime = time.time()
+
+    results_data = []
+    for test in results:
+        results_data.append({
+            'test_case_id': test.id,
+            'Test Name': test.test_name
+        })
+
+    column_list = ['Test Name']
+    total_pages = ceil(total_results / PAGE_SIZE)
+    print("timeTaken to format result: ", time.time() - stTime)    
+    return jsonify({
+        "test_data": results_data,
+        "columnList": column_list,
+        "total_pages": total_pages,
+        "current_page": page_number
+    }), 200
+
+@app.route('/get_test_info/', methods=['GET'])
+def get_test_info():
+    stTime = time.time()
+    date_str = request.args.get('date')
+    test_id = request.args.get('test_id')
+    print("date_str: ", date_str)
+    print("test_id: ", test_id)
+
+    # Convert date from DD-MM-YYYY to YYYY-MM-DD for SQL compatibility
+    try:
+        specific_date = datetime.strptime(date_str, '%d-%m-%Y').date()
+    except ValueError:
+        return jsonify({"message": "Invalid date format, should be DD-MM-YYYY"}), 400
+
+    # Query to get the test case and related group information
+    test_case = db.session.query(TestCase).join(TestGroup).filter(
+        TestCase.id == test_id
+    ).first()
+
+    if not test_case:
+        return jsonify({"message": "Test case not found"}), 404
+
+    # Query to get the test results for the specific date
+    test_result = db.session.query(TestResult).filter(
+        TestResult.test_case_id == test_id,
+        TestResult.date_run == specific_date
+    ).first()
+
+    if not test_result:
+        return jsonify({"message": "No test results found for the given date"}), 404
+
+    # Query to get the dependencies for the test case
+    dependencies = db.session.query(TestDependency).filter(
+        TestDependency.test_id == test_id
+    ).all()
+
+    dependent_tests = []
+    for dep in dependencies:
+        dependent_test_case = db.session.query(TestCase).filter(TestCase.id == dep.dependent_test_id).first()
+        if dependent_test_case:
+            dependent_tests.append({
+                'id': dependent_test_case.id,
+                'test_name': dependent_test_case.test_name
+            })
+
+    test_info = {
+        'id': test_case.id,
+        'test_name': test_case.test_name,
+        'test_code': test_case.test_code,
+        'creation_date': test_case.creation_date,
+        'group_id': test_case.group.id,
+        'group_name': test_case.group.name,
+        'time_taken': test_result.time_taken,
+        'pass_status': test_result.pass_status,
+        'error_message': test_result.error_message,
+        'dependent_tests': dependent_tests  # Add the list of dependent tests
+    }
+
+    print("total time taken: ", time.time() - stTime)
+    return jsonify(test_info), 200
 
 @app.route('/get_test_result_summary/', methods=['GET'])
 def get_test_result_summary():
@@ -328,6 +408,19 @@ def get_test_result_summary():
     print("Total time taken: ", time.time() - stTime)
 
     return jsonify({"groups_data": groups_data, "columnList": column_list}), 200
+
+@app.route('/search_tests', methods=['GET'])
+def search_tests():
+    query = request.args.get('query', '')
+    limit = request.args.get('limit', 10, type=int)
+
+    if not query:
+        return jsonify([]), 200
+
+    tests = db.session.query(TestCase).filter(TestCase.test_name.ilike(f'%{query}%')).limit(limit).all()
+
+    results = [{'id': test.id, 'test_name': test.test_name} for test in tests]
+    return jsonify(results), 200
 
 @app.route('/executeQcode/', methods=['POST'])
 def execute_q_code():
