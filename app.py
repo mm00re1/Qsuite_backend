@@ -237,6 +237,23 @@ def get_test_results_by_day():
 
     total_results = query.count()  # Get the total number of results for pagination
 
+    # Additional query to get the total number of passed and failed tests
+    passed_count = db.session.query(db.func.count(TestResult.id)).join(TestCase).filter(
+        TestResult.date_run == specific_date,
+        TestResult.pass_status == True
+    )
+    failed_count = db.session.query(db.func.count(TestResult.id)).join(TestCase).filter(
+        TestResult.date_run == specific_date,
+        TestResult.pass_status == False
+    )
+
+    if group_id:
+        passed_count = passed_count.filter(TestCase.group_id == group_id)
+        failed_count = failed_count.filter(TestCase.group_id == group_id)
+
+    passed_count = passed_count.scalar()
+    failed_count = failed_count.scalar()
+
     query = query.offset((page_number - 1) * PAGE_SIZE).limit(PAGE_SIZE)
     results = query.all()
     print("timeTaken for db query: ", time.time() - stTime)
@@ -257,12 +274,15 @@ def get_test_results_by_day():
 
     column_list = ["Test Name", "Time Taken", "Status"]
     total_pages = ceil(total_results / PAGE_SIZE)
-    print("timeTaken to format result: ", time.time() - stTime)    
+    print("timeTaken to format result: ", time.time() - stTime)
+    
     return jsonify({
         "test_data": results_data,
         "columnList": column_list,
         "total_pages": total_pages,
-        "current_page": page_number
+        "current_page": page_number,
+        "total_passed": passed_count,  # Add total passed count
+        "total_failed": failed_count   # Add total failed count
     }), 200
 
 @app.route('/get_tests_by_group/', methods=['GET'])
@@ -338,9 +358,15 @@ def get_test_info():
         print(dep)
         dependent_test_case = db.session.query(TestCase).filter(TestCase.id == dep.dependent_test_id).first()
         if dependent_test_case:
+            # Query to get the pass status of the dependent test for the specific date
+            dependent_test_result = db.session.query(TestResult).filter(
+                TestResult.test_case_id == dependent_test_case.id,
+                TestResult.date_run == specific_date
+            ).first()
             dependent_tests.append({
-                'id': dependent_test_case.id,
-                'test_name': dependent_test_case.test_name
+                'test_case_id': dependent_test_case.id,
+                'Test Name': dependent_test_case.test_name,
+                'Status': dependent_test_result.pass_status if dependent_test_result else None  # Add pass status
             })
 
     # Get the last 30 days of results
@@ -352,6 +378,7 @@ def get_test_info():
 
     dates = [result.date_run.strftime('%Y-%m-%d') for result in last_30_days_results]
     statuses = [1 if result.pass_status else 0 for result in last_30_days_results]
+    time_taken = [result.time_taken for result in last_30_days_results]
 
     test_info = {
         'id': test_case.id,
@@ -360,9 +387,11 @@ def get_test_info():
         'creation_date': test_case.creation_date,
         'group_id': test_case.group.id,
         'group_name': test_case.group.name,
-        'dependent_tests': dependent_tests,  # Add the list of dependent tests
+        'dependent_tests': dependent_tests,  # Add the list of dependent tests with pass status
+        'dependent_tests_columns': ["Test Name", "Status"],
         'last_30_days_dates': dates,
-        'last_30_days_statuses': statuses
+        'last_30_days_statuses': statuses,
+        'last_30_days_timeTaken': time_taken  # Add time taken for the last 30 days
     }
 
     if test_result:
