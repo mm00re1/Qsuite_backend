@@ -5,7 +5,7 @@ from flask_cors import CORS
 from KdbSubs import *
 from math import ceil
 from sqlalchemy import asc, desc
-from models import db, TestCase, TestResult, TestGroup  # Importing models and db from models.py
+from models import db, TestCase, TestResult, TestGroup, TestDependency  # Importing models and db from models.py
 
 app = Flask(__name__)
 CORS(app)
@@ -72,6 +72,7 @@ def add_test_case():
     data = request.json
     group_id = data.get('group_id')
     dependencies = data.get('dependencies', [])  # Get dependencies from the request, default to an empty list
+    print("adding dependencies: ",dependencies)
 
     # Check if the group_id is provided
     if not group_id:
@@ -164,28 +165,30 @@ def get_test_results_30_days():
     stTime = time.time()
     group_id = request.args.get('group_id')
 
-    # Validate group_id
-    if not group_id:
-        return jsonify({"message": "Group ID is required"}), 400
-    try:
-        group_id = int(group_id)
-    except ValueError:
-        return jsonify({"message": "Invalid Group ID format, should be an integer"}), 400
-
     # Calculate the date 30 days ago
     end_date = datetime.utcnow().date()
     start_date = end_date - timedelta(days=30)
 
-    # Query to get counts of passed and failed tests per day for the specific group
-    results_summary = db.session.query(
+    # Base query
+    query = db.session.query(
         TestResult.date_run,
         db.func.sum(db.case((TestResult.pass_status == True, 1), else_=0)).label('passed'),
         db.func.sum(db.case((TestResult.pass_status == False, 1), else_=0)).label('failed')
     ).filter(
-        TestResult.group_id == group_id,
         TestResult.date_run >= start_date,
         TestResult.date_run <= end_date
-    ).group_by(
+    )
+
+    # Add group_id filter if provided
+    if group_id:
+        try:
+            group_id = int(group_id)
+            query = query.filter(TestResult.group_id == group_id)
+        except ValueError:
+            return jsonify({"message": "Invalid Group ID format, should be an integer"}), 400
+
+    # Group by date
+    results_summary = query.group_by(
         TestResult.date_run
     ).all()
 
@@ -325,9 +328,6 @@ def get_test_info():
         TestResult.date_run == specific_date
     ).first()
 
-    if not test_result:
-        return jsonify({"message": "No test results found for the given date"}), 404
-
     # Query to get the dependencies for the test case
     dependencies = db.session.query(TestDependency).filter(
         TestDependency.test_id == test_id
@@ -335,12 +335,23 @@ def get_test_info():
 
     dependent_tests = []
     for dep in dependencies:
+        print(dep)
         dependent_test_case = db.session.query(TestCase).filter(TestCase.id == dep.dependent_test_id).first()
         if dependent_test_case:
             dependent_tests.append({
                 'id': dependent_test_case.id,
                 'test_name': dependent_test_case.test_name
             })
+
+    # Get the last 30 days of results
+    last_30_days = datetime.utcnow() - timedelta(days=30)
+    last_30_days_results = db.session.query(TestResult).filter(
+        TestResult.test_case_id == test_id,
+        TestResult.date_run >= last_30_days
+    ).order_by(TestResult.date_run).all()
+
+    dates = [result.date_run.strftime('%Y-%m-%d') for result in last_30_days_results]
+    statuses = [1 if result.pass_status else 0 for result in last_30_days_results]
 
     test_info = {
         'id': test_case.id,
@@ -349,11 +360,23 @@ def get_test_info():
         'creation_date': test_case.creation_date,
         'group_id': test_case.group.id,
         'group_name': test_case.group.name,
-        'time_taken': test_result.time_taken,
-        'pass_status': test_result.pass_status,
-        'error_message': test_result.error_message,
-        'dependent_tests': dependent_tests  # Add the list of dependent tests
+        'dependent_tests': dependent_tests,  # Add the list of dependent tests
+        'last_30_days_dates': dates,
+        'last_30_days_statuses': statuses
     }
+
+    if test_result:
+        test_info.update({
+            'time_taken': test_result.time_taken,
+            'pass_status': test_result.pass_status,
+            'error_message': test_result.error_message,
+        })
+    else:
+        test_info.update({
+            'time_taken': None,
+            'pass_status': None,
+            'error_message': None,
+        })
 
     print("total time taken: ", time.time() - stTime)
     return jsonify(test_info), 200
