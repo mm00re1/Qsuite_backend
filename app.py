@@ -267,12 +267,12 @@ def get_test_results_by_day():
             'Test Name': result.test_case.test_name,
             'Time Taken': result.time_taken,
             'Status': result.pass_status,
-            'error_message': result.error_message,
+            'Error Message': result.error_message,
             'group_id': result.test_case.group.id,  # Return group ID
             'group_name': result.test_case.group.name  # Return group name
         })
 
-    column_list = ["Test Name", "Time Taken", "Status"]
+    column_list = ["Test Name", "Time Taken", "Status", "Error Message"]
     total_pages = ceil(total_results / PAGE_SIZE)
     print("timeTaken to format result: ", time.time() - stTime)
     
@@ -471,7 +471,7 @@ def search_tests():
 
     tests = db.session.query(TestCase).filter(TestCase.test_name.ilike(f'%{query}%')).limit(limit).all()
 
-    results = [{'id': test.id, 'test_name': test.test_name} for test in tests]
+    results = [{'id': test.id, 'Test Name': test.test_name} for test in tests]
     return jsonify(results), 200
 
 @app.route('/executeQcode/', methods=['POST'])
