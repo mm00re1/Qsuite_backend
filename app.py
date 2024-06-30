@@ -101,6 +101,45 @@ def add_test_case():
     print("time taken to add test case: ", time.time() - start_time)
     return jsonify({"message": "Test case added successfully", "id": new_test_case.id}), 201
 
+@app.route('/edit_test_case/', methods=['PUT'])
+def edit_test_case():
+    start_time = time.time()
+    data = request.json
+    test_case_id = data.get('id')
+    dependencies = data.get('dependencies', [])  # Get dependencies from the request, default to an empty list
+    print("editing dependencies: ", dependencies)
+
+    # Check if the test_case_id is provided
+    if not test_case_id:
+        return jsonify({"message": "Test Case ID is required"}), 400
+
+    # Find the test case by ID
+    test_case = TestCase.query.get(test_case_id)
+    if not test_case:
+        return jsonify({"message": "Test case not found"}), 404
+
+    # Update test case fields
+    if 'test_name' in data:
+        test_case.test_name = data['test_name']
+    if 'test_code' in data:
+        test_case.test_code = data['test_code']
+    test_case.last_modified_date = datetime.utcnow()
+    db.session.commit()
+
+    # Update dependencies
+    # First, remove existing dependencies
+    TestDependency.query.filter_by(test_id=test_case.id).delete()
+    db.session.commit()
+
+    # Add new dependencies if any
+    for dep_id in dependencies:
+        dependency = TestDependency(test_id=test_case.id, dependent_test_id=dep_id)
+        db.session.add(dependency)
+    db.session.commit()
+
+    print("time taken to edit test case: ", time.time() - start_time)
+    return jsonify({"message": "Test case edited successfully"}), 200
+
 
 @app.route('/add_test_result/', methods=['POST'])
 def add_test_result():
@@ -204,6 +243,41 @@ def get_test_results_30_days():
     print("time taken: ", time.time() - stTime)
     return jsonify(results_data), 200
 
+@app.route('/get_test_group_stats/', methods=['GET'])
+def get_test_group_stats():
+    stTime = time.time()
+    date_str = request.args.get('date')
+    group_id = request.args.get('group_id')
+    try:
+        specific_date = datetime.strptime(date_str, '%d-%m-%Y').date()
+    except ValueError:
+        return jsonify({"message": "Invalid date format, should be DD-MM-YYYY"}), 400
+    
+        # Additional query to get the total number of passed and failed tests
+    passed_count = db.session.query(db.func.count(TestResult.id)).join(TestCase).filter(
+        TestResult.date_run == specific_date,
+        TestResult.pass_status == True
+    )
+    failed_count = db.session.query(db.func.count(TestResult.id)).join(TestCase).filter(
+        TestResult.date_run == specific_date,
+        TestResult.pass_status == False
+    )
+
+    if group_id:
+        passed_count = passed_count.filter(TestCase.group_id == group_id)
+        failed_count = failed_count.filter(TestCase.group_id == group_id)
+
+    passed_count = passed_count.scalar()
+    failed_count = failed_count.scalar()
+
+    print("timeTaken to get total passed/faield amount: ", time.time() - stTime)
+    
+    return jsonify({
+        "total_passed": passed_count,
+        "total_failed": failed_count
+    }), 200
+
+
 @app.route('/get_test_results_by_day/', methods=['GET'])
 def get_test_results_by_day():
     stTime = time.time()
@@ -237,23 +311,6 @@ def get_test_results_by_day():
 
     total_results = query.count()  # Get the total number of results for pagination
 
-    # Additional query to get the total number of passed and failed tests
-    passed_count = db.session.query(db.func.count(TestResult.id)).join(TestCase).filter(
-        TestResult.date_run == specific_date,
-        TestResult.pass_status == True
-    )
-    failed_count = db.session.query(db.func.count(TestResult.id)).join(TestCase).filter(
-        TestResult.date_run == specific_date,
-        TestResult.pass_status == False
-    )
-
-    if group_id:
-        passed_count = passed_count.filter(TestCase.group_id == group_id)
-        failed_count = failed_count.filter(TestCase.group_id == group_id)
-
-    passed_count = passed_count.scalar()
-    failed_count = failed_count.scalar()
-
     query = query.offset((page_number - 1) * PAGE_SIZE).limit(PAGE_SIZE)
     results = query.all()
     print("timeTaken for db query: ", time.time() - stTime)
@@ -281,20 +338,38 @@ def get_test_results_by_day():
         "columnList": column_list,
         "total_pages": total_pages,
         "current_page": page_number,
-        "total_passed": passed_count,  # Add total passed count
-        "total_failed": failed_count   # Add total failed count
     }), 200
 
 @app.route('/get_tests_by_group/', methods=['GET'])
 def get_tests_by_group():
     stTime = time.time()
     group_id = request.args.get('group_id')
+    date_str = request.args.get('date')
     page_number = request.args.get('page_number', 1, type=int)
-    
+
     if not group_id:
         return jsonify({"message": "Group ID is required"}), 400
 
-    query = db.session.query(TestCase).filter(TestCase.group_id == group_id)
+    if not date_str:
+        return jsonify({"message": "Date is required"}), 400
+
+    # Convert date from DD-MM-YYYY to YYYY-MM-DD for SQL compatibility
+    try:
+        specific_date = datetime.strptime(date_str, '%d-%m-%Y').date()
+    except ValueError:
+        return jsonify({"message": "Invalid date format, should be DD-MM-YYYY"}), 400
+
+    # Query to get test cases that have been run on the specified date
+    run_test_case_ids = db.session.query(TestResult.test_case_id).join(TestCase).filter(
+        TestResult.date_run == specific_date,
+        TestCase.group_id == group_id
+    ).distinct()
+
+    # Query to get un-run test cases
+    query = db.session.query(TestCase).filter(
+        TestCase.group_id == group_id,
+        ~TestCase.id.in_(run_test_case_ids)
+    )
 
     total_results = query.count()  # Get the total number of results for pagination
 
@@ -310,14 +385,86 @@ def get_tests_by_group():
             'Test Name': test.test_name
         })
 
-    column_list = ['Test Name']
     total_pages = ceil(total_results / PAGE_SIZE)
-    print("timeTaken to format result: ", time.time() - stTime)    
+    column_list = ["Test Name"]
+    print("timeTaken to format result: ", time.time() - stTime)
+
     return jsonify({
         "test_data": results_data,
         "columnList": column_list,
         "total_pages": total_pages,
-        "current_page": page_number
+        "current_page": page_number,
+    }), 200
+
+@app.route('/get_tests_by_ids/', methods=['GET'])
+def get_tests_by_ids():
+    stTime = time.time()
+    test_ids_str = request.args.get('test_ids')
+    date_str = request.args.get('date')
+    group_id = request.args.get('group_id')
+    
+    try:
+        specific_date = datetime.strptime(date_str, '%d-%m-%Y').date()
+    except ValueError:
+        return jsonify({"message": "Invalid date format, should be DD-MM-YYYY"}), 400
+    
+    if not test_ids_str:
+        return jsonify({"message": "Test IDs are required"}), 400
+
+    try:
+        test_ids = [int(id_str) for id_str in test_ids_str.split(',')]
+    except ValueError:
+        return jsonify({"message": "Invalid test IDs format, should be a comma-separated list of integers"}), 400
+
+    # Query to get test results for the given test IDs
+    query = db.session.query(TestResult).join(TestCase).join(TestGroup).filter(
+        TestResult.date_run == specific_date
+    )
+
+    if group_id:
+        query = query.filter(TestCase.group_id == group_id)
+
+    query = query.filter(TestCase.id.in_(test_ids))
+    test_results = query.all()
+
+    # Find which test IDs are not in the test results
+    found_test_ids = {result.test_case_id for result in test_results}
+    missing_test_ids = set(test_ids) - found_test_ids
+
+    # Query to get test cases for the missing test IDs
+    missing_test_cases = db.session.query(TestCase).filter(TestCase.id.in_(missing_test_ids)).all()
+
+    results_data = []
+    for result in test_results:
+        results_data.append({
+            'id': result.id,
+            'test_case_id': result.test_case_id,
+            'Test Name': result.test_case.test_name,
+            'Time Taken': result.time_taken,
+            'Status': result.pass_status,
+            'Error Message': result.error_message,
+            'group_id': result.test_case.group.id,  # Return group ID
+            'group_name': result.test_case.group.name  # Return group name
+        })
+
+    for test in missing_test_cases:
+        results_data.append({
+            'id': None,
+            'test_case_id': test.id,
+            'Test Name': test.test_name,
+            'Time Taken': None,
+            'Status': None,
+            'Error Message': '',
+            'group_id': test.group.id,  # Return group ID
+            'group_name': test.group.name  # Return group name
+        })
+
+    column_list = ["Test Name", "Time Taken", "Status", "Error Message"]
+    print("timeTaken for db query and formatting result: ", time.time() - stTime)
+    
+    return jsonify({
+        "test_data": results_data,
+        "columnList": column_list,
     }), 200
 
 @app.route('/get_test_info/', methods=['GET'])
@@ -366,7 +513,8 @@ def get_test_info():
             dependent_tests.append({
                 'test_case_id': dependent_test_case.id,
                 'Test Name': dependent_test_case.test_name,
-                'Status': dependent_test_result.pass_status if dependent_test_result else None  # Add pass status
+                'Status': dependent_test_result.pass_status if dependent_test_result else None,  # Add pass status
+                'Error Message': dependent_test_result.error_message if dependent_test_result else None
             })
 
     # Get the last 30 days of results
@@ -388,7 +536,7 @@ def get_test_info():
         'group_id': test_case.group.id,
         'group_name': test_case.group.name,
         'dependent_tests': dependent_tests,  # Add the list of dependent tests with pass status
-        'dependent_tests_columns': ["Test Name", "Status"],
+        'dependent_tests_columns': ["Test Name", "Status", "Error Message"],
         'last_30_days_dates': dates,
         'last_30_days_statuses': statuses,
         'last_30_days_timeTaken': time_taken  # Add time taken for the last 30 days
@@ -465,11 +613,19 @@ def get_test_result_summary():
 def search_tests():
     query = request.args.get('query', '')
     limit = request.args.get('limit', 10, type=int)
+    group_id = request.args.get('group_id')
 
     if not query:
         return jsonify([]), 200
 
-    tests = db.session.query(TestCase).filter(TestCase.test_name.ilike(f'%{query}%')).limit(limit).all()
+    # Base query for searching tests
+    query_stmt = db.session.query(TestCase).filter(TestCase.test_name.ilike(f'%{query}%'))
+
+    # Apply additional filter if group_id is provided
+    if group_id:
+        query_stmt = query_stmt.filter(TestCase.group_id == group_id)
+
+    tests = query_stmt.limit(limit).all()
 
     results = [{'id': test.id, 'Test Name': test.test_name} for test in tests]
     return jsonify(results), 200
