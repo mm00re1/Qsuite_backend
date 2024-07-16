@@ -12,7 +12,7 @@ def wrapQcode(code):
     #block from parsing result greater than 1MB in size, users can view head of result if necessary ie 10#table
     return "{[] response: " + qFunction + "[]; $[1000000 < -22!response; \"can't return preview of objects this large\"; response]}"
 
-def sendKdbQuery(kdbFunction, host, port, *args):
+def sendFreeFormQuery(kdbFunction, host, port, *args):
     q = QConnection(host=host, port=port, timeout = 10)
     q.open()
     try:
@@ -31,6 +31,35 @@ def sendKdbQuery(kdbFunction, host, port, *args):
 
     except Exception as e:
         res = {"success":False, "data": "", "message": "Kdb Error => " + str(e)}
+    q.close() 
+    return res
+
+def sendFunctionalQuery(kdbFunction, host, port):
+    q = QConnection(host=host, port=port, timeout = 10)
+    q.open()
+    try:
+        response = q.sendSync('.qsuite.executeFunction', kdbFunction)
+        #if res is a boolean
+        if type(response) is np.bool_:
+            if response:
+                res = {"success": True, "data": "", "message": "Test Ran Successfully"}
+            else:
+                res = {"success": False, "data": "", "message": "Test Failed"}
+        else:
+            string_response = str(response)
+            if len(string_response) > 400:
+                string_response = string_response[:400] + "......"
+            res = {"success": False, "data": string_response, "message": "Response was not Boolean"}
+
+    except Exception as e:
+        res = {"success":False, "data": "", "message": "Kdb Error => " + str(e)}
+    q.close() 
+    return res
+
+def sendKdbQuery(kdbFunction, host, port, *args):
+    q = QConnection(host=host, port=port, timeout = 10)
+    q.open()
+    res = q.sendSync(kdbFunction, *args)
     q.close() 
     return res
 
