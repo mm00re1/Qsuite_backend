@@ -9,6 +9,7 @@ class TestCase(db.Model):
     test_name = db.Column(db.String(50), nullable=False)
     test_code = db.Column(db.Text, nullable=False)
     creation_date = db.Column(db.DateTime, default=datetime.utcnow)
+    free_form = db.Column(db.Boolean, default=True, nullable=False)  # New column
     group = db.relationship('TestGroup', backref=db.backref('test_cases', lazy=True))
 
 class TestResult(db.Model):
