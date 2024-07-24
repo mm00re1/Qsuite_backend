@@ -7,7 +7,7 @@ from typing import List, Optional
 import time
 from math import floor
 
-from models.models import TestResult, TestCase, TestGroup, TestDependency
+from models.models import TestResult, TestCase, TestGroup
 from dependencies import get_db
 from config import PAGE_SIZE
 
@@ -76,7 +76,7 @@ async def get_test_results_by_day(
     date: str,
     group_id: Optional[int] = None,
     page_number: int = 1,
-    sort_option: str = "",
+    sortOption: str = "",
     db: Session = Depends(get_db)
 ):
     stTime = time.time()
@@ -93,14 +93,17 @@ async def get_test_results_by_day(
     if group_id:
         query = query.filter(TestCase.group_id == group_id)
 
-    if sort_option == 'Failed':
+    print("sort option: ", sortOption)
+    print("page_number: ", page_number)
+    if sortOption == 'Failed':
         query = query.order_by(desc(TestResult.pass_status == False))
-    elif sort_option == 'Passed':
+    elif sortOption == 'Passed':
         query = query.order_by(desc(TestResult.pass_status == True))
-    elif sort_option == 'Time Taken':
+    elif sortOption == 'Time Taken':
         query = query.order_by(desc(TestResult.time_taken))
 
     total_test_results = query.count()
+    print("count run tests: ", total_test_results)
     total_pages_test_results = 1 + floor(total_test_results / PAGE_SIZE)
 
     query = query.offset((page_number - 1) * PAGE_SIZE).limit(PAGE_SIZE)
@@ -134,12 +137,18 @@ async def get_test_results_by_day(
         TestCase.group_id == group_id,
         ~TestCase.id.in_(run_test_case_ids)
     ).count()
+    print("count un-run tests: ", unrun_tests_count)
 
     total_pages_with_unrun = 1 + floor((total_test_results + unrun_tests_count) / PAGE_SIZE)
 
     if page_number >= total_pages_test_results:
-        rows_in_first_page = PAGE_SIZE - (total_test_results % PAGE_SIZE)
-        unrun_limit = PAGE_SIZE if page_number > total_pages_test_results else PAGE_SIZE - (total_test_results % PAGE_SIZE)
+        if page_number > total_pages_test_results:
+            rows_in_first_page = PAGE_SIZE - (total_test_results % PAGE_SIZE)
+            unrun_limit = PAGE_SIZE
+        else:
+            rows_in_first_page = 0
+            unrun_limit = PAGE_SIZE - (total_test_results % PAGE_SIZE)
+
         unrun_offset = rows_in_first_page + max(0, (page_number - total_pages_test_results - 1) * PAGE_SIZE)
 
         if unrun_limit > 0:
