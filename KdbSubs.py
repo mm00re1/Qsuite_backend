@@ -1,5 +1,4 @@
 from qpython.qconnection import QConnection
-import numpy
 import threading
 from qpython.qtype import QException
 from qpython.qcollection import QTable
@@ -62,6 +61,13 @@ def sendKdbQuery(kdbFunction, host, port, *args):
     res = q.sendSync(kdbFunction, *args)
     q.close() 
     return res
+
+def test_kdb_conn(host, port, tls):
+    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10)
+    q.open()
+    q.close()
+    #throws exception if it times out or port doesn't exist
+    return "success"
 
 class kdbSub(threading.Thread):
     def __init__(self, tbl, index, kdb_host, kdb_port):

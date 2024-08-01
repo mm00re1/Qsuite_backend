@@ -15,7 +15,7 @@ class TestCase(Base):
     test_name = Column(String(50), nullable=False)
     test_code = Column(Text, nullable=False)
     creation_date = Column(DateTime, default=datetime.utcnow)
-    free_form = Column(Boolean, default=True, nullable=False)  # New column
+    free_form = Column(Boolean, default=True, nullable=False)
     group = relationship('TestGroup', backref='test_cases')
 
 class TestResult(Base):
@@ -36,6 +36,7 @@ class TestGroup(Base):
     server = Column(String(100), nullable=False)
     port = Column(Integer, nullable=False)
     schedule = Column(String(100), nullable=True)
+    tls = Column(Boolean, nullable=False, default=False)
 
 class TestDependency(Base):
     __tablename__ = 'test_dependency'

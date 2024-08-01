@@ -11,17 +11,38 @@ from dependencies import get_db
 
 router = APIRouter()
 
+class ConnectionTest(BaseModel):
+    server: str
+    port: int
+    tls: bool
+
 class TestGroupCreate(BaseModel):
     name: str
     server: str
     port: int
     schedule: Optional[str] = None
+    tls: bool
 
 class TestGroupUpdate(BaseModel):
     name: Optional[str] = None
     server: Optional[str] = None
     port: Optional[int] = None
     schedule: Optional[str] = None
+    tls: bool
+
+@router.post("/test_kdb_connection/")
+async def test_kdb_connection(test_group: ConnectionTest, db: Session = Depends(get_db)):
+    try:
+        # Assuming this function exists and tests the connection to kdb
+        result = test_kdb_conn(
+            server=test_group.server,
+            port=test_group.port,
+            tls=test_group.tls
+        )
+        return {"message": "success", "details": connection_result}, 200
+
+    except Exception as e:
+        return {"message": "failed", "details": str(e)}, 200
 
 @router.post("/add_test_group/")
 async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_db)):
@@ -29,7 +50,8 @@ async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_
         name=test_group.name,
         server=test_group.server,
         port=test_group.port,
-        schedule=test_group.schedule
+        schedule=test_group.schedule,
+        tls=test_group.tls
     )
     db.add(new_test_group)
     db.commit()
@@ -49,6 +71,8 @@ async def edit_test_group(id: int, test_group: TestGroupUpdate, db: Session = De
         test_group_obj.port = test_group.port
     if test_group.schedule is not None:
         test_group_obj.schedule = test_group.schedule
+    if test_group.tls is not None:
+        test_group_obj.tls = test_group.tls
 
     db.commit()
     return {"message": "Test group updated successfully"}
@@ -63,7 +87,8 @@ async def get_test_groups(db: Session = Depends(get_db)):
             "name": group.name,
             "server": group.server,
             "port": group.port,
-            "schedule": group.schedule
+            "schedule": group.schedule,
+            "tls": group.tls
         } for group in test_groups
     ]
     return groups_data

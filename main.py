@@ -1,14 +1,15 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from models.models import engine, Base
-from endpoints import view_dates, modify_test_cases, add_view_test_results, add_view_test_groups, search_tests, view_tests, run_q_code
 from config import BASE_DIR
-
-app = FastAPI()
 
 # Ensure the db directory exists
 os.makedirs(os.path.join(BASE_DIR, "instance"), exist_ok=True)
+
+from models.models import engine, Base
+from endpoints import view_dates, modify_test_cases, add_view_test_results, add_view_test_groups, search_tests, view_tests, run_q_code
+
+app = FastAPI()
 
 # Setup CORS
 app.add_middleware(
