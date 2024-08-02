@@ -222,10 +222,11 @@ async def get_test_result_summary(date: str, db: Session = Depends(get_db)):
             "Port": group.port,
             "Scheduled": group.schedule,
             "Passed": group_summary['passed'],
-            "Failed": group_summary['failed']
+            "Failed": group_summary['failed'],
+            "TLS":group.tls
         })
 
-    column_list = ["Name", "Machine", "Port", "Scheduled", "Passed", "Failed"]
+    column_list = ["Name", "Machine", "Port", "Scheduled", "Passed", "Failed", "TLS"]
     print("Total time taken: ", time.time() - stTime)
 
     return {"groups_data": groups_data, "columnList": column_list}

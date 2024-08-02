@@ -8,6 +8,7 @@ from math import floor
 
 from models.models import TestGroup, TestCase, TestResult
 from dependencies import get_db
+from KdbSubs import *
 
 router = APIRouter()
 
@@ -34,15 +35,11 @@ class TestGroupUpdate(BaseModel):
 async def test_kdb_connection(test_group: ConnectionTest, db: Session = Depends(get_db)):
     try:
         # Assuming this function exists and tests the connection to kdb
-        result = test_kdb_conn(
-            server=test_group.server,
-            port=test_group.port,
-            tls=test_group.tls
-        )
-        return {"message": "success", "details": connection_result}, 200
+        result = test_kdb_conn(host=test_group.server, port=test_group.port, tls=test_group.tls)
+        return {"message": "success", "details": result}
 
     except Exception as e:
-        return {"message": "failed", "details": str(e)}, 200
+        return {"message": "failed", "details": str(e)}
 
 @router.post("/add_test_group/")
 async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_db)):
@@ -80,7 +77,6 @@ async def edit_test_group(id: int, test_group: TestGroupUpdate, db: Session = De
 @router.get("/test_groups/")
 async def get_test_groups(db: Session = Depends(get_db)):
     test_groups = db.query(TestGroup).all()
-    print("test_groups: ",test_groups)
     groups_data = [
         {
             "id": group.id,
