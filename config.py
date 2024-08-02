@@ -1,7 +1,5 @@
 import os
 
-kdb_host = "localhost"
-kdb_port = 5001
 PAGE_SIZE = 50
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

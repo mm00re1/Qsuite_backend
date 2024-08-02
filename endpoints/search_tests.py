@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import List, Optional
 
 from models.models import TestResult, TestCase, TestGroup
-from config import kdb_host, kdb_port
 from dependencies import get_db
 from KdbSubs import *
 
@@ -106,7 +105,13 @@ async def search_functional_tests(
     if not query:
         return []
 
-    matchingTestNames = sendKdbQuery('.qsuite.showMatchingTests', kdb_host, kdb_port, query)
+    # Query the TestGroup table to get the server, port, and tls values
+    test_group = db.query(TestGroup).filter(TestGroup.id == group_id).first()
+
+    if not test_group:
+        raise HTTPException(status_code=404, detail="TestGroup not found")
+
+    matchingTestNames = sendKdbQuery('.qsuite.showMatchingTests', test_group.server, test_group.port, test_group.tls, query)
     matchingTestNames = matchingTestNames[:limit]
     results = [x.decode('latin') for x in matchingTestNames]
     return results

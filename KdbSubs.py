@@ -11,8 +11,8 @@ def wrapQcode(code):
     #block from parsing result greater than 1MB in size, users can view head of result if necessary ie 10#table
     return "{[] response: " + qFunction + "[]; $[1000000 < -22!response; \"can't return preview of objects this large\"; response]}"
 
-def sendFreeFormQuery(kdbFunction, host, port, *args):
-    q = QConnection(host=host, port=port, timeout = 10)
+def sendFreeFormQuery(kdbFunction, host, port, tls, *args):
+    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10)
     q.open()
     try:
         response = q.sendSync(kdbFunction, *args)
@@ -33,8 +33,8 @@ def sendFreeFormQuery(kdbFunction, host, port, *args):
     q.close() 
     return res
 
-def sendFunctionalQuery(kdbFunction, host, port):
-    q = QConnection(host=host, port=port, timeout = 10)
+def sendFunctionalQuery(kdbFunction, host, port, tls):
+    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10)
     q.open()
     try:
         response = q.sendSync('.qsuite.executeFunction', kdbFunction)
@@ -55,15 +55,15 @@ def sendFunctionalQuery(kdbFunction, host, port):
     q.close() 
     return res
 
-def sendKdbQuery(kdbFunction, host, port, *args):
-    q = QConnection(host=host, port=port, timeout = 10)
+def sendKdbQuery(kdbFunction, host, port, tls, *args):
+    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10)
     q.open()
     res = q.sendSync(kdbFunction, *args)
-    q.close() 
+    q.close()
     return res
 
 def test_kdb_conn(host, port, tls):
-    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10)
+    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 5)
     q.open()
     q.close()
     #throws exception if it times out or port doesn't exist

@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from models.models import TestResult, TestCase, TestGroup, TestDependency
-from config import kdb_host, kdb_port
 from dependencies import get_db
 from KdbSubs import *
 
@@ -94,8 +93,17 @@ async def all_functional_tests(
     group_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
+    if group_id is None:
+        raise HTTPException(status_code=400, detail="group_id is required")
 
-    TestNames = sendKdbQuery('.qsuite.showAllTests', kdb_host, kdb_port, [])
+    # Query the TestGroup table to get the server, port, and tls values
+    test_group = db.query(TestGroup).filter(TestGroup.id == group_id).first()
+
+    if not test_group:
+        raise HTTPException(status_code=404, detail="TestGroup not found")
+
+    # Call sendKdbQuery with the fetched parameters
+    TestNames = sendKdbQuery('.qsuite.showAllTests', test_group.server, test_group.port, test_group.tls, [])
     TestNames = TestNames[:limit]
     results = [x.decode('latin') for x in TestNames]
     return results
@@ -106,7 +114,13 @@ async def view_test_code(
     test_name: str,
     db: Session = Depends(get_db)
 ):
+    # Query the TestGroup table to get the server, port, and tls values
+    test_group = db.query(TestGroup).filter(TestGroup.id == group_id).first()
 
-    test_code = sendKdbQuery('.qsuite.parseTestCode', kdb_host, kdb_port, test_name)
+    if not test_group:
+        raise HTTPException(status_code=404, detail="TestGroup not found")
+
+    # Call sendKdbQuery with the fetched parameters
+    test_code = sendKdbQuery('.qsuite.parseTestCode', test_group.server, test_group.port, test_group.tls, test_name)
     results = test_code.decode('latin')
     return results
