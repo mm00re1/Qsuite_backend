@@ -13,8 +13,8 @@ def wrapQcode(code):
 
 def sendFreeFormQuery(kdbFunction, host, port, tls, *args):
     q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10)
-    q.open()
     try:
+        q.open()
         response = q.sendSync(kdbFunction, *args)
         #if res is a boolean
         if type(response) is np.bool_:
