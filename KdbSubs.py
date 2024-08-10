@@ -11,7 +11,6 @@ custom_ca = config['security']['custom_ca_path']
 
 def wrapQcode(code):
     qFunction = '{[] ' + ''.join(code) + '}'  # Join the lines of code into a single line inside a function
-    #print(qFunction)
     #block from parsing result greater than 1MB in size, users can view head of result if necessary ie 10#table
     return "{[] response: " + qFunction + "[]; $[1000000 < -22!response; \"can't return preview of objects this large\"; response]}"
 
@@ -60,7 +59,6 @@ def sendFunctionalQuery(kdbFunction, host, port, tls):
     return res
 
 def sendKdbQuery(kdbFunction, host, port, tls, *args):
-    print("calling sendKdbQuery")
     q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10, custom_ca = custom_ca)
     q.open()
     res = q.sendSync(kdbFunction, *args)
