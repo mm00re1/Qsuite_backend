@@ -4,6 +4,10 @@ from qpython.qtype import QException
 from qpython.qcollection import QTable
 from queue import Queue
 import numpy as np
+from custom_config_load import *
+
+config = load_config()
+custom_ca = config['security']['custom_ca_path']
 
 def wrapQcode(code):
     qFunction = '{[] ' + ''.join(code) + '}'  # Join the lines of code into a single line inside a function
@@ -12,7 +16,7 @@ def wrapQcode(code):
     return "{[] response: " + qFunction + "[]; $[1000000 < -22!response; \"can't return preview of objects this large\"; response]}"
 
 def sendFreeFormQuery(kdbFunction, host, port, tls, *args):
-    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10)
+    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10, custom_ca = custom_ca)
     q.open()
     try:
         response = q.sendSync(kdbFunction, *args)
@@ -34,7 +38,7 @@ def sendFreeFormQuery(kdbFunction, host, port, tls, *args):
     return res
 
 def sendFunctionalQuery(kdbFunction, host, port, tls):
-    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10)
+    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10, custom_ca = custom_ca)
     q.open()
     try:
         response = q.sendSync('.qsuite.executeFunction', kdbFunction)
@@ -56,14 +60,15 @@ def sendFunctionalQuery(kdbFunction, host, port, tls):
     return res
 
 def sendKdbQuery(kdbFunction, host, port, tls, *args):
-    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10)
+    print("calling sendKdbQuery")
+    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10, custom_ca = custom_ca)
     q.open()
     res = q.sendSync(kdbFunction, *args)
     q.close()
     return res
 
 def test_kdb_conn(host, port, tls):
-    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 5)
+    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 5, custom_ca = custom_ca)
     q.open()
     q.close()
     #throws exception if it times out or port doesn't exist
@@ -72,7 +77,7 @@ def test_kdb_conn(host, port, tls):
 class kdbSub(threading.Thread):
     def __init__(self, tbl, index, kdb_host, kdb_port):
         super(kdbSub, self).__init__()
-        self.q = QConnection(host=kdb_host, port=kdb_port)
+        self.q = QConnection(host=kdb_host, port=kdb_port, custom_ca = custom_ca)
         self.q.open()
         self.q.sendSync('.u.sub', numpy.string_(tbl), numpy.string_(index))
         self.message_queue = Queue()
