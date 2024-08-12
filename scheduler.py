@@ -9,23 +9,28 @@ from models.models import TestGroup, TestCase, TestResult, SessionLocal
 from utils import parse_time_to_cron
 from KdbSubs import wrapQcode, sendFreeFormQuery, sendFunctionalQuery
 
-
 # Set up logging configuration
 log_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 os.makedirs(log_directory, exist_ok=True)
 
 log_file_path = os.path.join(log_directory, "scheduler.log")
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        TimedRotatingFileHandler(log_file_path, when="midnight", interval=1, backupCount=7)
-    ]
-)
-
+# Configure logging
+logging.basicConfig(level=logging.INFO)  # Set base level to DEBUG for troubleshooting
 logger = logging.getLogger(__name__)
+
+# Create and add file handler
+file_handler = TimedRotatingFileHandler(log_file_path, when="midnight", interval=1, backupCount=7)
+file_handler.setLevel(logging.INFO)  # Ensure file handler level matches
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+# Add stream handler for console output
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.INFO)  # Adjust level if needed
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
 
 # Initialize the scheduler
 scheduler = BlockingScheduler()
@@ -38,19 +43,18 @@ def run_scheduled_test_group(test_group_id: int):
     try:
         test_group = session.query(TestGroup).filter(TestGroup.id == test_group_id).first()
         if not test_group:
-            logging.error(f"TestGroup ID {test_group_id} not found.")
+            logger.error(f"TestGroup ID {test_group_id} not found.")
             return
 
         # Retrieve test cases for the group
         test_cases = session.query(TestCase).filter(TestCase.group_id == test_group_id).all()
-        
+
         for test_case in test_cases:
             start_time = datetime.utcnow()
             if test_case.free_form:
                 code_lines = test_case.test_code.split('\n\n')
                 kdbQuery = wrapQcode(code_lines)
                 result = sendFreeFormQuery(kdbQuery, test_group.server, test_group.port, test_group.tls, [])
-
             else:   # test is a predefined q function
                 result = sendFunctionalQuery(test_case.test_code, test_group.server, test_group.port, test_group.tls)
 
@@ -62,7 +66,6 @@ def run_scheduled_test_group(test_group_id: int):
             else:
                 err_message = result["message"]
 
-
             test_result = TestResult(
                 test_case_id = test_case.id,
                 group_id = test_group_id,
@@ -73,14 +76,13 @@ def run_scheduled_test_group(test_group_id: int):
             )
             session.add(test_result)
             session.commit()
-            logging.info(f"Executed test case '{test_case.test_name}' with status: {result['success']}")
+            logger.info(f"Executed test case '{test_case.test_name}' with status: {result['success']}")
 
     finally:
         session.close()
 
-
 def setup_jobs():
-    logger.info("starting to setup the jobs")
+    logger.info("Starting to set up the jobs")
     session: Session = SessionLocal()
 
     try:
@@ -107,6 +109,4 @@ def setup_jobs():
 if __name__ == "__main__":
     setup_jobs()
     logger.info("Starting scheduler")
-    logger.info("log_file_path: ", log_file_path)
     scheduler.start()
-
