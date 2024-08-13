@@ -2,12 +2,14 @@ import os
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
-from apscheduler.schedulers.blocking import BlockingScheduler
+from fastapi import FastAPI, HTTPException
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
-from models.models import TestGroup, TestCase, TestResult, SessionLocal
+from models.models import engine, Base, TestGroup, TestCase, TestResult, SessionLocal
 from utils import parse_time_to_cron
 from KdbSubs import wrapQcode, sendFreeFormQuery, sendFunctionalQuery
+
 
 # Set up logging configuration
 log_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
@@ -32,8 +34,52 @@ stream_handler.setLevel(logging.INFO)  # Adjust level if needed
 stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 
+
+# Initialize FastAPI app for managing scheduler updates
+app = FastAPI()
+
 # Initialize the scheduler
-scheduler = BlockingScheduler()
+scheduler = AsyncIOScheduler()
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Set up jobs on startup."""
+    logger.info("Starting to set up the jobs")
+    session: Session = SessionLocal()
+
+    try:
+        test_groups = session.query(TestGroup).all()
+        for test_group in test_groups:
+            if test_group.schedule:
+                cron_time = parse_time_to_cron(test_group.schedule)
+                if cron_time:
+                    scheduler.add_job(
+                        run_scheduled_test_group,
+                        CronTrigger.from_crontab(f"{cron_time} * * *"),
+                        args=[test_group.id],
+                        id=str(test_group.id),
+                        replace_existing=True
+                    )
+                    logger.info(f"Scheduled job for TestGroup ID {test_group.id} at {cron_time} * * *")
+                else:
+                    logger.warning(f"Skipping TestGroup ID {test_group.id} due to invalid schedule.")
+
+    except Exception as e:
+        logger.error(f"Error scheduling jobs: {str(e)}")
+    finally:
+        session.close()
+
+    # Start the scheduler
+    logger.info("Starting scheduler")
+    scheduler.start()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shut down the scheduler on app shutdown."""
+    logger.info("Shutting down scheduler")
+    scheduler.shutdown()
+
 
 def run_scheduled_test_group(test_group_id: int):
     logger.info(f"Running scheduled job for TestGroup ID: {test_group_id}")
@@ -70,6 +116,7 @@ def run_scheduled_test_group(test_group_id: int):
                 test_case_id = test_case.id,
                 group_id = test_group_id,
                 date_run = datetime.utcnow().date(),
+                time_run = datetime.utcnow().time(),
                 time_taken = time_taken,
                 pass_status = result["success"],
                 error_message = err_message
@@ -81,32 +128,42 @@ def run_scheduled_test_group(test_group_id: int):
     finally:
         session.close()
 
-def setup_jobs():
-    logger.info("Starting to set up the jobs")
+
+def add_or_update_job(test_group_id: int):
     session: Session = SessionLocal()
 
     try:
-        test_groups = session.query(TestGroup).all()
-        for test_group in test_groups:
-            if test_group.schedule:
-                cron_time = parse_time_to_cron(test_group.schedule)
-                if cron_time:
-                    scheduler.add_job(
-                        run_scheduled_test_group,
-                        CronTrigger.from_crontab(f"{cron_time} * * *"),
-                        args=[test_group.id],
-                        id=str(test_group.id),
-                        replace_existing=True
-                    )
-                    logger.info(f"Scheduled job for TestGroup ID {test_group.id} at {cron_time} * * *")
-                else:
-                    logger.warning(f"Skipping TestGroup ID {test_group.id} due to invalid schedule.")
+        test_group = session.query(TestGroup).filter(TestGroup.id == test_group_id).first()
+        if test_group and test_group.schedule:
+            cron_time = parse_time_to_cron(test_group.schedule)
+            if cron_time:
+                scheduler.add_job(
+                    run_scheduled_test_group,
+                    CronTrigger.from_crontab(f"{cron_time} * * *"),
+                    args=[test_group.id],
+                    id=str(test_group.id),
+                    replace_existing=True
+                )
+                logger.info(f"Updated job for TestGroup ID {test_group.id} at {cron_time} * * *")
+            else:
+                logger.warning(f"Invalid schedule for TestGroup ID {test_group.id}. Job not added/updated.")
     except Exception as e:
-        logger.error(f"Error scheduling jobs: {str(e)}")
+        logger.error(f"Error updating job for TestGroup ID {test_group_id}: {str(e)}")
     finally:
         session.close()
 
-if __name__ == "__main__":
-    setup_jobs()
-    logger.info("Starting scheduler")
-    scheduler.start()
+
+@app.post("/update_job/{test_group_id}")
+async def update_job(test_group_id: int):
+    logger.info("updating or adding job for test group: " + str(test_group_id))
+    jobs = scheduler.get_jobs()
+    logger.info(f"Total jobs scheduled: {len(jobs)}")
+    add_or_update_job(test_group_id)
+    jobs = scheduler.get_jobs()
+    logger.info(f"Total jobs scheduled: {len(jobs)}")
+    if not jobs:
+        logger.info("No jobs currently scheduled.")
+    for job in jobs:
+        logger.info(f"Job ID: {job.id}")
+
+

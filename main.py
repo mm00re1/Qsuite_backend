@@ -9,7 +9,6 @@ from endpoints import view_dates, modify_test_cases, add_view_test_results, add_
 
 
 log_directory = os.path.join(BASE_DIR, "logs")
-os.makedirs(log_directory, exist_ok=True)
 
 log_file_path = os.path.join(log_directory, "app.log")
 
@@ -23,9 +22,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
-# Ensure the db directory exists
-os.makedirs(os.path.join(BASE_DIR, "instance"), exist_ok=True)
 
 app = FastAPI()
 
