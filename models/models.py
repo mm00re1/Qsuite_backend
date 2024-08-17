@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Date, Float
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Date, Time, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from config import SQLALCHEMY_DATABASE_URI
@@ -24,7 +24,8 @@ class TestResult(Base):
     test_case_id = Column(Integer, ForeignKey('test_case.id'), nullable=False)
     group_id = Column(Integer, ForeignKey('test_group.id'), nullable=False)  # Added group_id
     test_case = relationship('TestCase', backref='results')
-    date_run = Column(Date, nullable=False, default=datetime.utcnow, index=True)
+    date_run = Column(Date, nullable=False, default=datetime.utcnow().date, index=True)
+    time_run = Column(Time, nullable=False, default=datetime.utcnow().time)
     time_taken = Column(Float, nullable=False)
     pass_status = Column(Boolean, nullable=False)
     error_message = Column(Text, nullable=True)

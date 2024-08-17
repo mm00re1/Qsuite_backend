@@ -13,30 +13,6 @@ from config import PAGE_SIZE
 
 router = APIRouter()
 
-class TestResultCreate(BaseModel):
-    test_case_id: int
-    date_run: Optional[datetime] = None
-    time_taken: float
-    pass_status: bool
-    error_message: Optional[str] = None
-
-
-@router.post("/add_test_result/")
-async def add_test_result(test_result: TestResultCreate, db: Session = Depends(get_db)):
-    start_time = time.time()
-    
-    new_test_result = TestResult(
-        test_case_id=test_result.test_case_id,
-        date_run=test_result.date_run or datetime.utcnow(),
-        time_taken=test_result.time_taken,
-        pass_status=test_result.pass_status,
-        error_message=test_result.error_message
-    )
-    db.add(new_test_result)
-    db.commit()
-    print("time taken to add test result: ", time.time() - start_time)
-    return {"message": "Test result added successfully", "id": new_test_result.id}, 201
-
 
 @router.get("/get_test_results_30_days/")
 async def get_test_results_30_days(group_id: Optional[int] = None, db: Session = Depends(get_db)):
@@ -121,7 +97,8 @@ async def get_test_results_by_day(
             'Status': result.pass_status,
             'Error Message': result.error_message,
             'group_id': result.test_case.group.id,
-            'group_name': result.test_case.group.name
+            'group_name': result.test_case.group.name,
+            'time_run': result.time_run
         })
 
     run_test_case_ids = db.query(TestResult.test_case_id).join(TestCase).filter(
@@ -170,7 +147,8 @@ async def get_test_results_by_day(
                     'Status': None,
                     'Error Message': None,
                     'group_id': test.group.id,
-                    'group_name': test.group.name
+                    'group_name': test.group.name,
+                    'time_run': None
                 })
 
     column_list = ["Test Name", "Time Taken", "Status", "Error Message"]

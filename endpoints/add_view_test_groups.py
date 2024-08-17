@@ -1,3 +1,4 @@
+import requests
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
@@ -9,6 +10,8 @@ from math import floor
 from models.models import TestGroup, TestCase, TestResult
 from dependencies import get_db
 from KdbSubs import *
+from config import SCHEDULER_URL 
+
 
 router = APIRouter()
 
@@ -52,7 +55,18 @@ async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_
     )
     db.add(new_test_group)
     db.commit()
-    return {"message": "Test group added successfully", "id": new_test_group.id}, 201
+    db.refresh(new_test_group)
+
+    # Notify the scheduler to add the new job
+    try:
+        response = requests.post(f"{SCHEDULER_URL}/update_job/{new_test_group.id}")
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Failed to update scheduler")
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Scheduler communication error: {e}")
+
+    return {"message": "Test group added successfully", "id": new_test_group.id}
+
 
 @router.put("/edit_test_group/{id}/")
 async def edit_test_group(id: int, test_group: TestGroupUpdate, db: Session = Depends(get_db)):
@@ -72,7 +86,17 @@ async def edit_test_group(id: int, test_group: TestGroupUpdate, db: Session = De
         test_group_obj.tls = test_group.tls
 
     db.commit()
+
+    # Notify the scheduler to update the job
+    try:
+        response = requests.post(f"{SCHEDULER_URL}/update_job/{id}")
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Failed to update scheduler")
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Scheduler communication error: {e}")
+
     return {"message": "Test group updated successfully"}
+
 
 @router.get("/test_groups/")
 async def get_test_groups(db: Session = Depends(get_db)):
