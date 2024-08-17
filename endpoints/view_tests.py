@@ -103,10 +103,14 @@ async def all_functional_tests(
         raise HTTPException(status_code=404, detail="TestGroup not found")
 
     # Call sendKdbQuery with the fetched parameters
-    TestNames = sendKdbQuery('.qsuite.showAllTests', test_group.server, test_group.port, test_group.tls, [])
-    TestNames = TestNames[:limit]
-    results = [x.decode('latin') for x in TestNames]
-    return results
+    try:
+        TestNames = sendKdbQuery('.qsuite.showAllTests', test_group.server, test_group.port, test_group.tls, [])
+        TestNames = TestNames[:limit]
+        results = [x.decode('latin') for x in TestNames]
+        return {"success": True, "results": results, "message": ""}
+    except Exception as e:
+        return {"success": False, "results": [], "message": "Kdb Error during retrieval of available q functions => " + str(e)}
+
 
 @router.get("/view_test_code/")
 async def view_test_code(
@@ -121,6 +125,10 @@ async def view_test_code(
         raise HTTPException(status_code=404, detail="TestGroup not found")
 
     # Call sendKdbQuery with the fetched parameters
-    test_code = sendKdbQuery('.qsuite.parseTestCode', test_group.server, test_group.port, test_group.tls, test_name)
-    results = test_code.decode('latin')
-    return results
+    try:
+        test_code = sendKdbQuery('.qsuite.parseTestCode', test_group.server, test_group.port, test_group.tls, test_name)
+        results = test_code.decode('latin')
+        return {"success": True, "results": results, "message": ""}
+    except Exception as e:
+        return {"success": False, "results": [], "message": "Kdb Error while reading code for function '" + test_name + "' => " + str(e)}
+

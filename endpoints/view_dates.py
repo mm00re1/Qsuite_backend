@@ -37,6 +37,13 @@ def initialize_cache():
     
     print("Cache initialized in:", time.time() - start_time, "seconds")
 
+
+@router.post("/refresh_cache/")
+async def refresh_cache():
+    initialize_cache()
+    return {"message": "Cache refreshed successfully."}
+
+
 @router.get("/get_unique_dates/")
 async def get_unique_dates():
     if not cache['unique_dates']:

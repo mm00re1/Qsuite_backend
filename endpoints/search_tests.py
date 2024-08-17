@@ -111,7 +111,11 @@ async def search_functional_tests(
     if not test_group:
         raise HTTPException(status_code=404, detail="TestGroup not found")
 
-    matchingTestNames = sendKdbQuery('.qsuite.showMatchingTests', test_group.server, test_group.port, test_group.tls, query)
-    matchingTestNames = matchingTestNames[:limit]
-    results = [x.decode('latin') for x in matchingTestNames]
-    return results
+    try:
+        matchingTestNames = sendKdbQuery('.qsuite.showMatchingTests', test_group.server, test_group.port, test_group.tls, query)
+        matchingTestNames = matchingTestNames[:limit]
+        results = [x.decode('latin') for x in matchingTestNames]
+        return {"success": True, "results": results, "message": ""}
+    except Exception as e:
+        return {"success": False, "results": [], "message": "Kdb Error while searching for matching q function => " + str(e)}
+
