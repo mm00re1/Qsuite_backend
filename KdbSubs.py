@@ -38,8 +38,8 @@ def sendFreeFormQuery(kdbFunction, host, port, tls, *args):
 
 def sendFunctionalQuery(kdbFunction, host, port, tls):
     q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10, custom_ca = custom_ca)
-    q.open()
     try:
+        q.open()
         response = q.sendSync('.qsuite.executeFunction', kdbFunction)
         #if res is a boolean
         if type(response) is np.bool_:

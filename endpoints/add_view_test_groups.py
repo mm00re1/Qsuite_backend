@@ -10,7 +10,7 @@ from math import floor
 from models.models import TestGroup, TestCase, TestResult
 from dependencies import get_db
 from KdbSubs import *
-from config import SCHEDULER_URL 
+from config.config import SCHEDULER_URL 
 
 
 router = APIRouter()

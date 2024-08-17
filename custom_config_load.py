@@ -13,7 +13,7 @@ DEFAULT_CONFIG = {
     }
 }
 
-def load_config(file_path='custom_config.ini', default_config=DEFAULT_CONFIG):
+def load_config(file_path='config/custom_config.ini', default_config=DEFAULT_CONFIG):
     # Initialize the ConfigParser
     config = configparser.ConfigParser()
 

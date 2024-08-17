@@ -161,3 +161,6 @@ cython_debug/
 
 # config for customisation of this application
 custom_config.ini
+
+logs/
+backups/

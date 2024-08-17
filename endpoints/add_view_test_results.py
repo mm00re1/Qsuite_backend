@@ -9,7 +9,7 @@ from math import floor
 
 from models.models import TestResult, TestCase, TestGroup
 from dependencies import get_db
-from config import PAGE_SIZE
+from config.config import PAGE_SIZE
 
 router = APIRouter()
 

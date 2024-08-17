@@ -1,3 +1,4 @@
+import requests
 import os
 import logging
 from logging.handlers import TimedRotatingFileHandler
@@ -124,6 +125,16 @@ def run_scheduled_test_group(test_group_id: int):
             session.add(test_result)
             session.commit()
             logger.info(f"Executed test case '{test_case.test_name}' with status: {result['success']}")
+
+        # After committing new test results, trigger cache refresh
+        try:
+            response = requests.post("http://127.0.0.1:8000/refresh_cache/")
+            if response.status_code == 200:
+                logger.info("Cache refreshed successfully.")
+            else:
+                logger.error(f"Failed to refresh cache. Status code: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Error refreshing cache: {str(e)}")
 
     finally:
         session.close()

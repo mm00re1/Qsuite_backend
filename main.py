@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from config import BASE_DIR
+from config.config import BASE_DIR
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from models.models import engine, Base
