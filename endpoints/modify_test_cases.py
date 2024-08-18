@@ -4,9 +4,12 @@ from pydantic import BaseModel
 from datetime import datetime
 import time
 from typing import List
+import logging
 
 from models.models import TestGroup, TestCase, TestDependency
 from dependencies import get_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -26,6 +29,7 @@ class TestCaseEdit(BaseModel):
 
 @router.post("/add_test_case/")
 async def add_test_case(test_case: TestCaseCreate, db: Session = Depends(get_db)):
+    logger.info("add_test_case")
     start_time = time.time()
     
     group_id = test_case.group_id
@@ -62,6 +66,7 @@ async def add_test_case(test_case: TestCaseCreate, db: Session = Depends(get_db)
 
 @router.put("/edit_test_case/")
 async def edit_test_case(test_case: TestCaseEdit, db: Session = Depends(get_db)):
+    logger.info("edit_test_case")
     start_time = time.time()
     
     test_case_id = test_case.id

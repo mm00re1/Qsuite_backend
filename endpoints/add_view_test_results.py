@@ -6,16 +6,20 @@ from pydantic import BaseModel
 from typing import List, Optional
 import time
 from math import floor
+import logging
 
 from models.models import TestResult, TestCase, TestGroup
 from dependencies import get_db
 from config.config import PAGE_SIZE
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
 @router.get("/get_test_results_30_days/")
 async def get_test_results_30_days(group_id: Optional[int] = None, db: Session = Depends(get_db)):
+    logger.info("get_test_results_30_days")
     stTime = time.time()
 
     end_date = datetime.utcnow().date()
@@ -55,6 +59,7 @@ async def get_test_results_by_day(
     sortOption: str = "",
     db: Session = Depends(get_db)
 ):
+    logger.info("get_test_results_by_day")
     stTime = time.time()
 
     try:
@@ -164,6 +169,7 @@ async def get_test_results_by_day(
 
 @router.get("/get_test_result_summary/")
 async def get_test_result_summary(date: str, db: Session = Depends(get_db)):
+    logger.info("get_test_result_summary")
     stTime = time.time()
     print("starting query")
 

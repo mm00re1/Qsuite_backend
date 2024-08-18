@@ -2,10 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List, Optional
+import logging
 
 from models.models import TestResult, TestCase, TestGroup
 from dependencies import get_db
 from KdbSubs import *
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -16,6 +19,7 @@ async def get_tests_by_ids(
     group_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
+    logger.info("get_tests_by_ids")
     try:
         specific_date = datetime.strptime(date, '%d-%m-%Y').date()
     except ValueError:
@@ -82,6 +86,7 @@ async def search_tests(
     group_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
+    logger.info("search_tests")
     if not query:
         return []
 
@@ -102,6 +107,7 @@ async def search_functional_tests(
     group_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
+    logger.info("search_functional_tests")
     if not query:
         return []
 

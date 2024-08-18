@@ -30,5 +30,3 @@ logger.addHandler(TimedRotatingFileHandler(log_file_path, when="midnight", inter
 
 access_logger = logging.getLogger('gunicorn.access')
 access_logger.addHandler(TimedRotatingFileHandler(log_file_path, when="midnight", interval=1, backupCount=7))
-
-access_log_format = '%(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"'
