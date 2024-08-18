@@ -6,12 +6,14 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
 from math import floor
+import logging
 
 from models.models import TestGroup, TestCase, TestResult
 from dependencies import get_db
 from KdbSubs import *
 from config.config import SCHEDULER_URL 
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -36,6 +38,7 @@ class TestGroupUpdate(BaseModel):
 
 @router.post("/test_kdb_connection/")
 async def test_kdb_connection(test_group: ConnectionTest, db: Session = Depends(get_db)):
+    logger.info("testing kdb connection")
     try:
         # Assuming this function exists and tests the connection to kdb
         result = test_kdb_conn(host=test_group.server, port=test_group.port, tls=test_group.tls)
@@ -46,6 +49,7 @@ async def test_kdb_connection(test_group: ConnectionTest, db: Session = Depends(
 
 @router.post("/add_test_group/")
 async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_db)):
+    logger.info("adding test group")
     new_test_group = TestGroup(
         name=test_group.name,
         server=test_group.server,
@@ -70,6 +74,7 @@ async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_
 
 @router.put("/edit_test_group/{id}/")
 async def edit_test_group(id: int, test_group: TestGroupUpdate, db: Session = Depends(get_db)):
+    logger.info("editing test group")
     test_group_obj = db.query(TestGroup).get(id)
     if not test_group_obj:
         raise HTTPException(status_code=404, detail="Test group not found")
@@ -100,6 +105,7 @@ async def edit_test_group(id: int, test_group: TestGroupUpdate, db: Session = De
 
 @router.get("/test_groups/")
 async def get_test_groups(db: Session = Depends(get_db)):
+    logger.info("getting test groups")
     test_groups = db.query(TestGroup).all()
     groups_data = [
         {
@@ -115,6 +121,7 @@ async def get_test_groups(db: Session = Depends(get_db)):
 
 @router.get("/get_test_group_stats/")
 async def get_test_group_stats(date: str, group_id: Optional[int] = None, db: Session = Depends(get_db)):
+    logger.info("getting test group stats")
     try:
         specific_date = datetime.strptime(date, '%d-%m-%Y').date()
     except ValueError:

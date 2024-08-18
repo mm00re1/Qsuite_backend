@@ -2,10 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional
+import logging
 
 from models.models import TestResult, TestCase, TestGroup, TestDependency
 from dependencies import get_db
 from KdbSubs import *
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -15,6 +18,7 @@ async def get_test_info(
     test_id: int,
     db: Session = Depends(get_db)
 ):
+    logger.info("get_test_info")
     try:
         specific_date = datetime.strptime(date, '%d-%m-%Y').date()
     except ValueError:
@@ -93,6 +97,7 @@ async def all_functional_tests(
     group_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
+    logger.info("all_functional_tests")
     if group_id is None:
         raise HTTPException(status_code=400, detail="group_id is required")
 
@@ -118,6 +123,7 @@ async def view_test_code(
     test_name: str,
     db: Session = Depends(get_db)
 ):
+    logger.info("view_test_code")
     # Query the TestGroup table to get the server, port, and tls values
     test_group = db.query(TestGroup).filter(TestGroup.id == group_id).first()
 
