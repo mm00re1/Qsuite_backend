@@ -40,7 +40,7 @@ async def add_test_case(test_case: TestCaseCreate, db: Session = Depends(get_db)
     if not group_id:
         raise HTTPException(status_code=400, detail="Group ID is required")
 
-    test_group = db.query(TestGroup).get(group_id)
+    test_group = db.get(TestGroup, group_id)
     if not test_group:
         raise HTTPException(status_code=404, detail="Test group not found")
 
@@ -68,7 +68,7 @@ async def add_test_case(test_case: TestCaseCreate, db: Session = Depends(get_db)
 async def edit_test_case(test_case: TestCaseEdit, db: Session = Depends(get_db)):
     logger.info("edit_test_case")
     start_time = time.time()
-    
+
     test_case_id = test_case.id
     dependencies = test_case.dependencies
 
@@ -77,24 +77,32 @@ async def edit_test_case(test_case: TestCaseEdit, db: Session = Depends(get_db))
     if not test_case_id:
         raise HTTPException(status_code=400, detail="Test Case ID is required")
 
-    test_case_obj = db.query(TestCase).get(test_case_id)
+    test_case_obj = db.get(TestCase, test_case_id)
     if not test_case_obj:
         raise HTTPException(status_code=404, detail="Test case not found")
 
+    # Update the TestCase fields
     if test_case.test_name:
         test_case_obj.test_name = test_case.test_name
     if test_case.test_code:
         test_case_obj.test_code = test_case.test_code
     test_case_obj.last_modified_date = datetime.utcnow()
-    db.commit()
 
-    db.query(TestDependency).filter_by(test_id=test_case_obj.id).delete()
-    db.commit()
+    db.commit()  # Commit the changes to the test case
 
+    # Fetch and remove existing dependencies using session.delete()
+    existing_dependencies = db.query(TestDependency).filter_by(test_id=test_case_obj.id).all()
+    for dep in existing_dependencies:
+        db.delete(dep)
+    db.commit()  # Commit after removing dependencies
+
+    # Add new dependencies
     for dep_id in dependencies:
-        dependency = TestDependency(test_id=test_case_obj.id, dependent_test_id=dep_id)
-        db.add(dependency)
-    db.commit()
+        new_dependency = TestDependency(test_id=test_case_obj.id, dependent_test_id=dep_id)
+        db.add(new_dependency)
+
+    db.commit()  # Commit after adding new dependencies
 
     print("time taken to edit test case: ", time.time() - start_time)
     return {"message": "Test case edited successfully"}
+

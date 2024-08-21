@@ -75,7 +75,7 @@ async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_
 @router.put("/edit_test_group/{id}/")
 async def edit_test_group(id: int, test_group: TestGroupUpdate, db: Session = Depends(get_db)):
     logger.info("editing test group")
-    test_group_obj = db.query(TestGroup).get(id)
+    test_group_obj = db.get(TestGroup, id)
     if not test_group_obj:
         raise HTTPException(status_code=404, detail="Test group not found")
 
