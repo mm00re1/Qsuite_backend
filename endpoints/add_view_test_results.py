@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, desc
+from sqlalchemy import select
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from typing import List, Optional
@@ -23,7 +24,7 @@ async def get_test_results_30_days(group_id: Optional[int] = None, db: Session =
     stTime = time.time()
 
     end_date = datetime.utcnow().date()
-    start_date = end_date - timedelta(days=30)
+    start_date = end_date - timedelta(days=29)
 
     query = db.query(
         TestResult.date_run,
@@ -54,7 +55,7 @@ async def get_test_results_30_days(group_id: Optional[int] = None, db: Session =
 @router.get("/get_test_results_by_day/")
 async def get_test_results_by_day(
     date: str,
-    group_id: Optional[int] = None,
+    group_id: int,
     page_number: int = 1,
     sortOption: str = "",
     db: Session = Depends(get_db)
@@ -71,8 +72,7 @@ async def get_test_results_by_day(
         TestResult.date_run == specific_date
     )
 
-    if group_id:
-        query = query.filter(TestCase.group_id == group_id)
+    query = query.filter(TestCase.group_id == group_id)
 
     print("sort option: ", sortOption)
     print("page_number: ", page_number)
@@ -110,15 +110,16 @@ async def get_test_results_by_day(
         TestResult.date_run == specific_date
     ).distinct()
 
-    if group_id:
-        run_test_case_ids = run_test_case_ids.filter(TestCase.group_id == group_id)
+    run_test_case_ids = run_test_case_ids.filter(TestCase.group_id == group_id)
 
     run_test_case_ids = run_test_case_ids.subquery()
+    select_run_test_case_ids = select(run_test_case_ids.c.test_case_id)
 
     unrun_tests_count = db.query(TestCase).filter(
         TestCase.group_id == group_id,
-        ~TestCase.id.in_(run_test_case_ids)
+        ~TestCase.id.in_(select_run_test_case_ids)
     ).count()
+
     print("count un-run tests: ", unrun_tests_count)
 
     total_pages_with_unrun = 1 + floor((total_test_results + unrun_tests_count) / PAGE_SIZE)
@@ -136,7 +137,7 @@ async def get_test_results_by_day(
         if unrun_limit > 0:
             unrun_tests_query = db.query(TestCase).filter(
                 TestCase.group_id == group_id,
-                ~TestCase.id.in_(run_test_case_ids)
+                ~TestCase.id.in_(select_run_test_case_ids)
             ).offset(unrun_offset).limit(unrun_limit)
 
             unrun_tests = unrun_tests_query.all()
