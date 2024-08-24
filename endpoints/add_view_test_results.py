@@ -200,7 +200,7 @@ async def get_test_result_summary(date: str, db: Session = Depends(get_db)):
 
     groups_data = []
     for group in test_groups:
-        group_summary = summary_dict.get(group.id.bytes, {'passed': 0, 'failed': 0})
+        group_summary = summary_dict.get(group.id, {'passed': 0, 'failed': 0})
         groups_data.append({
             "id": group.id.hex(),
             "Name": group.name,

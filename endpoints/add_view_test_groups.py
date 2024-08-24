@@ -98,7 +98,7 @@ async def edit_test_group(id: UUID, test_group: TestGroupUpdate, db: Session = D
 
     # Notify the scheduler to update the job
     try:
-        response = requests.post(f"{SCHEDULER_URL}/update_job/{id.hex()}")
+        response = requests.post(f"{SCHEDULER_URL}/update_job/{id.hex}")
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail="Failed to update scheduler")
     except requests.exceptions.RequestException as e:

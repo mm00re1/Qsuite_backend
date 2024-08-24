@@ -58,6 +58,9 @@ def setup_mock_data_for_30_days(db_session):
     
     db_session.commit()
 
+    # Return the created groups for use in tests
+    return group_1, group_2
+
 # Test 1: Query results for group_1 with more than 30 days of data
 def test_get_test_results_30_days_more_than_30(client, setup_mock_data_for_30_days):
     # Simulate a GET request to the /get_test_results_30_days/ endpoint without group_id (all data)
@@ -116,18 +119,19 @@ def setup_mock_data_for_results_by_day(db_session):
     db_session.commit()
 
     # Create 200 TestCases
+    test_case_ids = []
     for i in range(200):
         test_case_id = uuid4()
         test_case = TestCase(id=test_case_id.bytes, test_name=f"Test Case {i+1}", group_id=group_id.bytes, test_code=f"print('Test {i+1}')")
         db_session.add(test_case)
+        test_case_ids.append(test_case_id)
 
     db_session.commit()
 
     # Add results for 75 TestCases (all on the same date)
     for i in range(75):
-        test_case_id = uuid4()
         test_result = TestResult(
-            test_case_id=test_case_id.bytes,
+            test_case_id=test_case_ids[i].bytes,
             group_id=group_id.bytes,
             date_run=datetime.strptime(TEST_DATE, '%d-%m-%Y').date(),
             time_taken=5.0,
@@ -136,6 +140,10 @@ def setup_mock_data_for_results_by_day(db_session):
         db_session.add(test_result)
 
     db_session.commit()
+
+    # Return the group and test_case_ids for use in tests
+    return group, test_case_ids
+
 
 # Test 1: Query page 1 – All run tests (50 results)
 def test_get_test_results_by_day_page_1(client, setup_mock_data_for_results_by_day, db_session):
@@ -224,6 +232,9 @@ def setup_mock_data_for_summary(db_session):
     db_session.add(test_result_1)
     db_session.add(test_result_2)
     db_session.commit()
+
+    # Return the groups for use in tests
+    return group_1, group_2
 
 # Test 1: Query for a specific date where results exist in multiple test groups
 def test_get_test_result_summary_with_results(client, setup_mock_data_for_summary):

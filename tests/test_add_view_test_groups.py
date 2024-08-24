@@ -22,7 +22,7 @@ def test_test_kdb_connection(mock_test_kdb_conn, client, db_session):
 
     # Simulate a POST request to the /test_kdb_connection/ endpoint
     response = client.post("/test_kdb_connection/", json=data)
-    
+
     # Validate the response
     assert response.status_code == 200
     assert response.json() == {"message": "success", "details": "Kdb connection successful"}
@@ -78,7 +78,7 @@ def test_edit_test_group(mock_requests_post, client, db_session):
     db_session.add(group)
     db_session.commit()
 
-    # Define the update data (adjust to match your TestGroupUpdate schema)
+    # Define the update data
     update_data = {
         "name": "Updated Test Group",
         "server": "127.0.0.1",
@@ -162,7 +162,7 @@ def setup_mock_data_for_stats(db_session):
     # Set up a test group and test cases with results
     group_id = uuid4()
     group = TestGroup(id=group_id.bytes, name="Test Group 1", server="localhost", port=1234, schedule="16:00", tls=True)
-    
+
     test_case_passed_id = uuid4()
     test_case_failed_id = uuid4()
 
@@ -185,11 +185,16 @@ def setup_mock_data_for_stats(db_session):
     db_session.add(test_result_failed)
     db_session.commit()
 
-# Test 1: Query stats for a specific date and group
-def test_get_test_group_stats(client, setup_mock_data_for_stats):
+def test_get_test_group_stats(client, db_session, setup_mock_data_for_stats):
+    # Query the first TestGroup from the database
+    group = db_session.query(TestGroup).first()
+
+    # Ensure that we have a group in the database
+    assert group is not None, "No TestGroup found in the database."
+
     # Simulate a GET request to the /get_test_group_stats/ endpoint
-    response = client.get("/get_test_group_stats/?date=01-08-2023&group_id=1")
-    
+    response = client.get(f"/get_test_group_stats/?date=01-08-2023&group_id={group.id.hex()}")
+
     # Validate the response
     assert response.status_code == 200
     assert response.json() == {
@@ -197,11 +202,16 @@ def test_get_test_group_stats(client, setup_mock_data_for_stats):
         "total_failed": 1
     }
 
-# Test 3: Test with no results for the date
-def test_get_test_group_stats_no_results(client, setup_mock_data_for_stats):
+def test_get_test_group_stats_no_results(client, db_session, setup_mock_data_for_stats):
+    # Query the first TestGroup from the database
+    group = db_session.query(TestGroup).first()
+
+    # Ensure that we have a group in the database
+    assert group is not None, "No TestGroup found in the database."
+
     # Simulate a GET request to the /get_test_group_stats/ endpoint for a date with no results
-    response = client.get("/get_test_group_stats/?date=02-08-2023&group_id=1")
-    
+    response = client.get(f"/get_test_group_stats/?date=02-08-2023&group_id={group.id.hex()}")
+
     # Validate the response
     assert response.status_code == 200
     assert response.json() == {

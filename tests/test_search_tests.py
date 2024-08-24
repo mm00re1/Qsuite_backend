@@ -34,6 +34,7 @@ def setup_mock_data(db_session):
 
     return {
         "group_id": group_id,
+        "test_result_id": test_result_id,
         "test_case_ran_id": test_case_ran_id,
         "test_case_unran_id": test_case_unran_id
     }
@@ -45,10 +46,14 @@ def test_get_tests_by_ids_ran_test(client, setup_mock_data):
     # Simulate API request to get the test case that has been run
     response = client.get(f"/get_tests_by_ids/?test_ids={test_case_ran_id.hex}&date=01-08-2023")
     assert response.status_code == 200
+
+    # Print the actual response to troubleshoot
+    print(response.json())
+
     assert response.json() == {
         "test_data": [
             {
-                "id": test_case_ran_id.hex,
+                "id": setup_mock_data["test_result_id"].hex,
                 "test_case_id": test_case_ran_id.hex,
                 "Test Name": "Test Case Ran",
                 "Time Taken": 5.0,
@@ -95,7 +100,7 @@ def test_get_tests_by_ids_both_tests(client, setup_mock_data):
     assert response.json() == {
         "test_data": [
             {
-                "id": test_case_ran_id.hex,
+                "id": setup_mock_data["test_result_id"].hex,
                 "test_case_id": test_case_ran_id.hex,
                 "Test Name": "Test Case Ran",
                 "Time Taken": 5.0,
