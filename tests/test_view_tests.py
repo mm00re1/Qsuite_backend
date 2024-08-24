@@ -2,6 +2,7 @@ from unittest.mock import patch
 import pytest
 from models.models import TestCase, TestGroup, TestResult, TestDependency
 from datetime import datetime, timedelta
+from uuid import uuid4  # Import uuid4 for generating UUIDs
 
 #############################
 ###### get_test_info ########
@@ -10,31 +11,43 @@ from datetime import datetime, timedelta
 # Fixture to set up mock data for /get_test_info/
 @pytest.fixture(scope="function")
 def setup_mock_data_for_test_info(db_session):
-    group = TestGroup(id=1, name="Test Group", server="localhost", port=1234, schedule="16:00", tls=True)
+    # Generate UUIDs for test group and test cases
+    group_id = uuid4()
+    test_case_id = uuid4()
+    dependent_case_id = uuid4()
+
+    group = TestGroup(id=group_id.bytes, name="Test Group", server="localhost", port=1234, schedule="16:00", tls=True)
     db_session.add(group)
     db_session.commit()
 
-    test_case = TestCase(id=1, test_name="Test Case", group_id=1, test_code="print('Test')", creation_date=datetime.utcnow(), free_form=True)
-    dependent_case = TestCase(id=2, test_name="Dependent Test", group_id=1, test_code="print('Dependent Test')")
+    test_case = TestCase(id=test_case_id.bytes, test_name="Test Case", group_id=group_id.bytes, test_code="print('Test')", creation_date=datetime.utcnow(), free_form=True)
+    dependent_case = TestCase(id=dependent_case_id.bytes, test_name="Dependent Test", group_id=group_id.bytes, test_code="print('Dependent Test')")
     
     db_session.add(test_case)
     db_session.add(dependent_case)
     db_session.commit()
 
-    test_result = TestResult(test_case_id=1, group_id=1, date_run=datetime.strptime("01-08-2023", '%d-%m-%Y').date(), time_taken=5.0, pass_status=True)
-    dependent_result = TestResult(test_case_id=2, group_id=1, date_run=datetime.strptime("01-08-2023", '%d-%m-%Y').date(), time_taken=4.0, pass_status=False)
+    test_result = TestResult(test_case_id=test_case_id.bytes, group_id=group_id.bytes, date_run=datetime.strptime("01-08-2023", '%d-%m-%Y').date(), time_taken=5.0, pass_status=True)
+    dependent_result = TestResult(test_case_id=dependent_case_id.bytes, group_id=group_id.bytes, date_run=datetime.strptime("01-08-2023", '%d-%m-%Y').date(), time_taken=4.0, pass_status=False)
     
     db_session.add(test_result)
     db_session.add(dependent_result)
     db_session.commit()
 
-    dependency = TestDependency(test_id=1, dependent_test_id=2)
+    dependency = TestDependency(test_id=test_case_id.bytes, dependent_test_id=dependent_case_id.bytes)
     db_session.add(dependency)
     db_session.commit()
 
+    return {
+        "test_case_id": test_case_id,
+        "dependent_case_id": dependent_case_id,
+        "group_id": group_id
+    }
+
 # Test 1: Query for a test case with results and dependencies
 def test_get_test_info_with_results_and_dependencies(client, setup_mock_data_for_test_info):
-    response = client.get("/get_test_info/?date=01-08-2023&test_id=1")
+    test_case_id = setup_mock_data_for_test_info["test_case_id"]
+    response = client.get(f"/get_test_info/?date=01-08-2023&test_id={test_case_id.hex}")
     assert response.status_code == 200
     data = response.json()
 
@@ -51,7 +64,8 @@ def test_get_test_info_with_results_and_dependencies(client, setup_mock_data_for
 
 # Test 2: Query for a test case with no results
 def test_get_test_info_no_results(client, setup_mock_data_for_test_info):
-    response = client.get("/get_test_info/?date=02-08-2023&test_id=1")
+    test_case_id = setup_mock_data_for_test_info["test_case_id"]
+    response = client.get(f"/get_test_info/?date=02-08-2023&test_id={test_case_id.hex}")
     assert response.status_code == 200
     data = response.json()
 
@@ -62,7 +76,8 @@ def test_get_test_info_no_results(client, setup_mock_data_for_test_info):
 
 # Test 3: Query for a test case with no dependencies
 def test_get_test_info_no_dependencies(client, setup_mock_data_for_test_info):
-    response = client.get("/get_test_info/?date=01-08-2023&test_id=2")
+    dependent_case_id = setup_mock_data_for_test_info["dependent_case_id"]
+    response = client.get(f"/get_test_info/?date=01-08-2023&test_id={dependent_case_id.hex}")
     assert response.status_code == 200
     data = response.json()
 
@@ -77,8 +92,11 @@ def test_get_test_info_no_dependencies(client, setup_mock_data_for_test_info):
 
 @patch('endpoints.view_tests.sendKdbQuery')
 def test_all_functional_tests(mock_send_kdb_query, client, db_session):
+    # Generate UUID for the test group
+    group_id = uuid4()
+
     # Set up test group in the database
-    group = TestGroup(id=1, name="Test Group", server="localhost", port=1234, schedule=None, tls=True)
+    group = TestGroup(id=group_id.bytes, name="Test Group", server="localhost", port=1234, schedule=None, tls=True)
     db_session.add(group)
     db_session.commit()
 
@@ -86,7 +104,7 @@ def test_all_functional_tests(mock_send_kdb_query, client, db_session):
     mock_send_kdb_query.return_value = [b"Test Function 1", b"Test Function 2"]
 
     # Simulate a GET request to the /all_functional_tests/ endpoint
-    response = client.get("/all_functional_tests/?group_id=1&limit=2")
+    response = client.get(f"/all_functional_tests/?group_id={group_id.hex}&limit=2")
     assert response.status_code == 200
     data = response.json()
 
@@ -96,8 +114,11 @@ def test_all_functional_tests(mock_send_kdb_query, client, db_session):
 
 @patch('endpoints.view_tests.sendKdbQuery')
 def test_all_functional_tests_error_handling(mock_send_kdb_query, client, db_session):
+    # Generate UUID for the test group
+    group_id = uuid4()
+
     # Set up test group in the database
-    group = TestGroup(id=1, name="Test Group", server="localhost", port=1234, schedule=None, tls=True)
+    group = TestGroup(id=group_id.bytes, name="Test Group", server="localhost", port=1234, schedule=None, tls=True)
     db_session.add(group)
     db_session.commit()
 
@@ -105,7 +126,7 @@ def test_all_functional_tests_error_handling(mock_send_kdb_query, client, db_ses
     mock_send_kdb_query.side_effect = Exception("Kdb Error")
 
     # Simulate a GET request to the /all_functional_tests/ endpoint
-    response = client.get("/all_functional_tests/?group_id=1&limit=2")
+    response = client.get(f"/all_functional_tests/?group_id={group_id.hex}&limit=2")
     assert response.status_code == 200
     data = response.json()
 
@@ -119,8 +140,11 @@ def test_all_functional_tests_error_handling(mock_send_kdb_query, client, db_ses
 
 @patch('endpoints.view_tests.sendKdbQuery')
 def test_view_test_code(mock_send_kdb_query, client, db_session):
+    # Generate UUID for the test group
+    group_id = uuid4()
+
     # Set up test group in the database
-    group = TestGroup(id=1, name="Test Group", server="localhost", port=1234, schedule=None, tls=True)
+    group = TestGroup(id=group_id.bytes, name="Test Group", server="localhost", port=1234, schedule=None, tls=True)
     db_session.add(group)
     db_session.commit()
 
@@ -128,7 +152,7 @@ def test_view_test_code(mock_send_kdb_query, client, db_session):
     mock_send_kdb_query.return_value = b"print('Test Code')"
 
     # Simulate a GET request to the /view_test_code/ endpoint
-    response = client.get("/view_test_code/?group_id=1&test_name=TestFunction")
+    response = client.get(f"/view_test_code/?group_id={group_id.hex}&test_name=TestFunction")
     assert response.status_code == 200
     data = response.json()
 
@@ -138,8 +162,11 @@ def test_view_test_code(mock_send_kdb_query, client, db_session):
 
 @patch('endpoints.view_tests.sendKdbQuery')
 def test_view_test_code_error_handling(mock_send_kdb_query, client, db_session):
+    # Generate UUID for the test group
+    group_id = uuid4()
+
     # Set up test group in the database
-    group = TestGroup(id=1, name="Test Group", server="localhost", port=1234, schedule=None, tls=True)
+    group = TestGroup(id=group_id.bytes, name="Test Group", server="localhost", port=1234, schedule=None, tls=True)
     db_session.add(group)
     db_session.commit()
 
@@ -147,10 +174,11 @@ def test_view_test_code_error_handling(mock_send_kdb_query, client, db_session):
     mock_send_kdb_query.side_effect = Exception("Kdb Error")
 
     # Simulate a GET request to the /view_test_code/ endpoint
-    response = client.get("/view_test_code/?group_id=1&test_name=TestFunction")
+    response = client.get(f"/view_test_code/?group_id={group_id.hex}&test_name=TestFunction")
     assert response.status_code == 200
     data = response.json()
 
     # Validate the error response
     assert data["success"] == False
     assert "Kdb Error" in data["message"]
+

@@ -1,17 +1,18 @@
 import requests
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case
+from sqlalchemy import func
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
-from math import floor
 import logging
+from uuid import UUID
 
 from models.models import TestGroup, TestCase, TestResult
 from dependencies import get_db
 from KdbSubs import *
-from config.config import SCHEDULER_URL 
+from config.config import SCHEDULER_URL
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +29,14 @@ class TestGroupCreate(BaseModel):
     port: int
     schedule: Optional[str] = None
     tls: bool
+    id: Optional[UUID] = None  # Allow specifying a UUID (e.g., in production)
 
 class TestGroupUpdate(BaseModel):
     name: Optional[str] = None
     server: Optional[str] = None
     port: Optional[int] = None
     schedule: Optional[str] = None
-    tls: bool
+    tls: Optional[bool] = None
 
 @router.post("/test_kdb_connection/")
 async def test_kdb_connection(test_group: ConnectionTest, db: Session = Depends(get_db)):
@@ -43,14 +45,16 @@ async def test_kdb_connection(test_group: ConnectionTest, db: Session = Depends(
         # Assuming this function exists and tests the connection to kdb
         result = test_kdb_conn(host=test_group.server, port=test_group.port, tls=test_group.tls)
         return {"message": "success", "details": result}
-
     except Exception as e:
         return {"message": "failed", "details": str(e)}
 
 @router.post("/add_test_group/")
 async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_db)):
     logger.info("adding test group")
+    
+    # Use the provided UUID if it exists (e.g., in production)
     new_test_group = TestGroup(
+        id=test_group.id.bytes if test_group.id else uuid.uuid4().bytes,
         name=test_group.name,
         server=test_group.server,
         port=test_group.port,
@@ -63,19 +67,19 @@ async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_
 
     # Notify the scheduler to add the new job
     try:
-        response = requests.post(f"{SCHEDULER_URL}/update_job/{new_test_group.id}")
+        response = requests.post(f"{SCHEDULER_URL}/update_job/{new_test_group.id.hex()}")
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail="Failed to update scheduler")
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Scheduler communication error: {e}")
 
-    return {"message": "Test group added successfully", "id": new_test_group.id}
+    return {"message": "Test group added successfully", "id": new_test_group.id.hex()}
 
 
 @router.put("/edit_test_group/{id}/")
-async def edit_test_group(id: int, test_group: TestGroupUpdate, db: Session = Depends(get_db)):
+async def edit_test_group(id: UUID, test_group: TestGroupUpdate, db: Session = Depends(get_db)):
     logger.info("editing test group")
-    test_group_obj = db.get(TestGroup, id)
+    test_group_obj = db.get(TestGroup, id.bytes)
     if not test_group_obj:
         raise HTTPException(status_code=404, detail="Test group not found")
 
@@ -94,7 +98,7 @@ async def edit_test_group(id: int, test_group: TestGroupUpdate, db: Session = De
 
     # Notify the scheduler to update the job
     try:
-        response = requests.post(f"{SCHEDULER_URL}/update_job/{id}")
+        response = requests.post(f"{SCHEDULER_URL}/update_job/{id.hex()}")
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail="Failed to update scheduler")
     except requests.exceptions.RequestException as e:
@@ -109,7 +113,7 @@ async def get_test_groups(db: Session = Depends(get_db)):
     test_groups = db.query(TestGroup).all()
     groups_data = [
         {
-            "id": group.id,
+            "id": group.id.hex(),
             "name": group.name,
             "server": group.server,
             "port": group.port,
@@ -120,7 +124,7 @@ async def get_test_groups(db: Session = Depends(get_db)):
     return groups_data
 
 @router.get("/get_test_group_stats/")
-async def get_test_group_stats(date: str, group_id: Optional[int] = None, db: Session = Depends(get_db)):
+async def get_test_group_stats(date: str, group_id: Optional[UUID] = None, db: Session = Depends(get_db)):
     logger.info("getting test group stats")
     try:
         specific_date = datetime.strptime(date, '%d-%m-%Y').date()
@@ -138,8 +142,8 @@ async def get_test_group_stats(date: str, group_id: Optional[int] = None, db: Se
     )
 
     if group_id:
-        passed_count_query = passed_count_query.filter(TestCase.group_id == group_id)
-        failed_count_query = failed_count_query.filter(TestCase.group_id == group_id)
+        passed_count_query = passed_count_query.filter(TestCase.group_id == group_id.bytes)
+        failed_count_query = failed_count_query.filter(TestCase.group_id == group_id.bytes)
 
     passed_count = passed_count_query.scalar()
     failed_count = failed_count_query.scalar()
@@ -148,3 +152,4 @@ async def get_test_group_stats(date: str, group_id: Optional[int] = None, db: Se
         "total_passed": passed_count,
         "total_failed": failed_count
     }
+

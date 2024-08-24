@@ -2,8 +2,8 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from uuid import uuid4  # Import uuid4 for generating UUIDs
 from models.models import TestCase, TestGroup, TestResult
-from sqlalchemy import func
 
 #############################
 ###### test_kdb_connection ###
@@ -55,14 +55,13 @@ def test_add_test_group(mock_requests_post, client, db_session):
 
     # Ensure the group was added to the database
     group_id = response.json()["id"]
-    added_group = db_session.query(TestGroup).filter_by(id=group_id).first()
+    added_group = db_session.query(TestGroup).filter_by(id=bytes.fromhex(group_id)).first()
     assert added_group is not None
     assert added_group.name == "New Test Group"
     assert added_group.server == "localhost"
     assert added_group.port == 1234
     assert added_group.schedule == "16:34"
     assert added_group.tls is True
-
 
 #############################
 ##### edit_test_group #######
@@ -74,12 +73,10 @@ def test_edit_test_group(mock_requests_post, client, db_session):
     mock_requests_post.return_value.status_code = 200
 
     # Set up a test group in the database
-    group = TestGroup(name="Old Test Group", server="localhost", port=1234, schedule="16:00", tls=True)
+    group_id = uuid4()
+    group = TestGroup(id=group_id.bytes, name="Old Test Group", server="localhost", port=1234, schedule="16:00", tls=True)
     db_session.add(group)
     db_session.commit()
-
-    # Get the group's ID for later verification
-    group_id = group.id
 
     # Define the update data (adjust to match your TestGroupUpdate schema)
     update_data = {
@@ -91,7 +88,7 @@ def test_edit_test_group(mock_requests_post, client, db_session):
     }
 
     # Simulate a PUT request to the /edit_test_group/{group_id}/ endpoint
-    response = client.put(f"/edit_test_group/{group_id}/", json=update_data)
+    response = client.put(f"/edit_test_group/{group_id.hex}/", json=update_data)
 
     # Validate the response
     assert response.status_code == 200
@@ -103,7 +100,7 @@ def test_edit_test_group(mock_requests_post, client, db_session):
 
     try:
         # Query the group to verify the update
-        updated_group = new_session.query(TestGroup).filter_by(id=group_id).first()
+        updated_group = new_session.query(TestGroup).filter_by(id=group_id.bytes).first()
 
         # Ensure the group was updated in the database
         assert updated_group.name == "Updated Test Group"
@@ -121,8 +118,11 @@ def test_edit_test_group(mock_requests_post, client, db_session):
 
 def test_get_test_groups(client, db_session):
     # Set up some test groups in the database
-    group_1 = TestGroup(name="Test Group 1", server="localhost", port=1234, schedule="16:00", tls=True)
-    group_2 = TestGroup(name="Test Group 2", server="127.0.0.1", port=5678, schedule="16:35", tls=False)
+    group_1_id = uuid4()
+    group_2_id = uuid4()
+
+    group_1 = TestGroup(id=group_1_id.bytes, name="Test Group 1", server="localhost", port=1234, schedule="16:00", tls=True)
+    group_2 = TestGroup(id=group_2_id.bytes, name="Test Group 2", server="127.0.0.1", port=5678, schedule="16:35", tls=False)
     db_session.add(group_1)
     db_session.add(group_2)
     db_session.commit()
@@ -135,7 +135,7 @@ def test_get_test_groups(client, db_session):
     assert len(response.json()) == 2
     assert response.json() == [
         {
-            "id": group_1.id,
+            "id": group_1_id.hex,
             "name": "Test Group 1",
             "server": "localhost",
             "port": 1234,
@@ -143,7 +143,7 @@ def test_get_test_groups(client, db_session):
             "tls": True
         },
         {
-            "id": group_2.id,
+            "id": group_2_id.hex,
             "name": "Test Group 2",
             "server": "127.0.0.1",
             "port": 5678,
@@ -160,17 +160,21 @@ def test_get_test_groups(client, db_session):
 @pytest.fixture(scope="function")
 def setup_mock_data_for_stats(db_session):
     # Set up a test group and test cases with results
-    group = TestGroup(id=1, name="Test Group 1", server="localhost", port=1234, schedule="16:00", tls=True)
+    group_id = uuid4()
+    group = TestGroup(id=group_id.bytes, name="Test Group 1", server="localhost", port=1234, schedule="16:00", tls=True)
     
-    test_case_passed = TestCase(id=1, test_name="Test Case Passed", group_id=1, test_code="print('Passed')")
-    test_case_failed = TestCase(id=2, test_name="Test Case Failed", group_id=1, test_code="print('Failed')")
+    test_case_passed_id = uuid4()
+    test_case_failed_id = uuid4()
+
+    test_case_passed = TestCase(id=test_case_passed_id.bytes, test_name="Test Case Passed", group_id=group_id.bytes, test_code="print('Passed')")
+    test_case_failed = TestCase(id=test_case_failed_id.bytes, test_name="Test Case Failed", group_id=group_id.bytes, test_code="print('Failed')")
 
     test_result_passed = TestResult(
-        id=1, test_case_id=1, group_id=1, date_run=datetime(2023, 8, 1).date(),
+        id=uuid4().bytes, test_case_id=test_case_passed_id.bytes, group_id=group_id.bytes, date_run=datetime(2023, 8, 1).date(),
         time_taken=5.0, pass_status=True
     )
     test_result_failed = TestResult(
-        id=2, test_case_id=2, group_id=1, date_run=datetime(2023, 8, 1).date(),
+        id=uuid4().bytes, test_case_id=test_case_failed_id.bytes, group_id=group_id.bytes, date_run=datetime(2023, 8, 1).date(),
         time_taken=7.0, pass_status=False
     )
 

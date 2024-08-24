@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime, timedelta
+from uuid import uuid4  # Import uuid4 for generating UUIDs
 from models.models import TestCase, TestGroup, TestResult
-from sqlalchemy import func, case
 
 ##############################
 ## get_test_results_30_days ##
@@ -11,16 +11,22 @@ from sqlalchemy import func, case
 @pytest.fixture(scope="function")
 def setup_mock_data_for_30_days(db_session):
     # Set up two test groups
-    group_1 = TestGroup(id=1, name="Test Group More Than 30 Days", server="localhost", port=1234, schedule="16:00", tls=True)
-    group_2 = TestGroup(id=2, name="Test Group Less Than 30 Days", server="127.0.0.1", port=5678, schedule="16:30", tls=False)
+    group_1_id = uuid4()
+    group_2_id = uuid4()
+    
+    group_1 = TestGroup(id=group_1_id.bytes, name="Test Group More Than 30 Days", server="localhost", port=1234, schedule="16:00", tls=True)
+    group_2 = TestGroup(id=group_2_id.bytes, name="Test Group Less Than 30 Days", server="127.0.0.1", port=5678, schedule="16:30", tls=False)
     
     db_session.add(group_1)
     db_session.add(group_2)
     db_session.commit()
 
     # Create TestCases for both groups
-    test_case_1 = TestCase(id=1, test_name="Test Case 1", group_id=1, test_code="print('Test 1')")
-    test_case_2 = TestCase(id=2, test_name="Test Case 2", group_id=2, test_code="print('Test 2')")
+    test_case_1_id = uuid4()
+    test_case_2_id = uuid4()
+
+    test_case_1 = TestCase(id=test_case_1_id.bytes, test_name="Test Case 1", group_id=group_1_id.bytes, test_code="print('Test 1')")
+    test_case_2 = TestCase(id=test_case_2_id.bytes, test_name="Test Case 2", group_id=group_2_id.bytes, test_code="print('Test 2')")
 
     db_session.add(test_case_1)
     db_session.add(test_case_2)
@@ -30,8 +36,8 @@ def setup_mock_data_for_30_days(db_session):
     for i in range(35):
         date_run = datetime.utcnow().date() - timedelta(days=i)
         result = TestResult(
-            test_case_id=1,
-            group_id=1,
+            test_case_id=test_case_1_id.bytes,
+            group_id=group_1_id.bytes,
             date_run=date_run,
             time_taken=5.0,
             pass_status=(i % 2 == 0)  # Alternate between pass and fail
@@ -42,8 +48,8 @@ def setup_mock_data_for_30_days(db_session):
     for i in range(20):
         date_run = datetime.utcnow().date() - timedelta(days=i)
         result = TestResult(
-            test_case_id=2,
-            group_id=2,
+            test_case_id=test_case_2_id.bytes,
+            group_id=group_2_id.bytes,
             date_run=date_run,
             time_taken=5.0,
             pass_status=(i % 2 == 0)  # Alternate between pass and fail
@@ -64,7 +70,8 @@ def test_get_test_results_30_days_more_than_30(client, setup_mock_data_for_30_da
 # Test 2: Query results for group_2 with less than 30 days of data, filtering by group_id
 def test_get_test_results_30_days_less_than_30_with_group(client, setup_mock_data_for_30_days):
     # Simulate a GET request to the /get_test_results_30_days/ endpoint with group_id=2
-    response = client.get("/get_test_results_30_days/?group_id=2")
+    group_2_id = setup_mock_data_for_30_days[1].id  # Fetch group_2's ID
+    response = client.get(f"/get_test_results_30_days/?group_id={group_2_id.hex()}")
     
     # Validate the response
     assert response.status_code == 200
@@ -103,22 +110,25 @@ TEST_DATE = "01-08-2023"
 @pytest.fixture(scope="function")
 def setup_mock_data_for_results_by_day(db_session):
     # Set up a test group
-    group = TestGroup(id=1, name="Test Group", server="localhost", port=1234, schedule="16:00", tls=True)
+    group_id = uuid4()
+    group = TestGroup(id=group_id.bytes, name="Test Group", server="localhost", port=1234, schedule="16:00", tls=True)
     db_session.add(group)
     db_session.commit()
 
     # Create 200 TestCases
     for i in range(200):
-        test_case = TestCase(id=i+1, test_name=f"Test Case {i+1}", group_id=1, test_code=f"print('Test {i+1}')")
+        test_case_id = uuid4()
+        test_case = TestCase(id=test_case_id.bytes, test_name=f"Test Case {i+1}", group_id=group_id.bytes, test_code=f"print('Test {i+1}')")
         db_session.add(test_case)
 
     db_session.commit()
 
     # Add results for 75 TestCases (all on the same date)
     for i in range(75):
+        test_case_id = uuid4()
         test_result = TestResult(
-            test_case_id=i+1,
-            group_id=1,
+            test_case_id=test_case_id.bytes,
+            group_id=group_id.bytes,
             date_run=datetime.strptime(TEST_DATE, '%d-%m-%Y').date(),
             time_taken=5.0,
             pass_status=(i % 2 == 0)  # Alternate between pass and fail
@@ -127,21 +137,10 @@ def setup_mock_data_for_results_by_day(db_session):
 
     db_session.commit()
 
-    # Print the count of TestCases and TestResults for debugging
-    total_test_cases = db_session.query(TestCase).count()
-    total_test_results = db_session.query(TestResult).count()
-    print(f"Total TestCases: {total_test_cases}")
-    print(f"Total TestResults: {total_test_results}")
-
 # Test 1: Query page 1 – All run tests (50 results)
 def test_get_test_results_by_day_page_1(client, setup_mock_data_for_results_by_day, db_session):
-    # Print the first 10 TestResults for debugging
-    first_10_results = db_session.query(TestResult).limit(10).all()
-    for result in first_10_results:
-        print(f"TestResult ID: {result.id}, Test Case ID: {result.test_case_id}, Date Run: {result.date_run}")
-
     # Simulate a GET request to the /get_test_results_by_day/ endpoint for page 1
-    response = client.get(f"/get_test_results_by_day/?date={TEST_DATE}&group_id=1&page_number=1")
+    response = client.get(f"/get_test_results_by_day/?date={TEST_DATE}&group_id={setup_mock_data_for_results_by_day[0].id.hex()}&page_number=1")
 
     # Validate the response
     assert response.status_code == 200
@@ -153,13 +152,12 @@ def test_get_test_results_by_day_page_1(client, setup_mock_data_for_results_by_d
 # Test 2: Query page 2 – Mix of run and unrun tests
 def test_get_test_results_by_day_page_2(client, setup_mock_data_for_results_by_day, db_session):
     # Simulate a GET request to the /get_test_results_by_day/ endpoint for page 2
-    response = client.get(f"/get_test_results_by_day/?date={TEST_DATE}&group_id=1&page_number=2")
+    response = client.get(f"/get_test_results_by_day/?date={TEST_DATE}&group_id={setup_mock_data_for_results_by_day[0].id.hex()}&page_number=2")
 
     # Validate the response
     assert response.status_code == 200
     data = response.json()
 
-    print(f"Page 2 Results: {data['test_data']}")
     assert len(data["test_data"]) == 50  # Expect 50 results on the second page
     for i in range(25):
         assert data["test_data"][i]["Status"] is not None  # Run tests
@@ -169,13 +167,12 @@ def test_get_test_results_by_day_page_2(client, setup_mock_data_for_results_by_d
 # Test 3: Query page 3 – All unrun tests
 def test_get_test_results_by_day_page_3(client, setup_mock_data_for_results_by_day, db_session):
     # Simulate a GET request to the /get_test_results_by_day/ endpoint for page 3
-    response = client.get(f"/get_test_results_by_day/?date={TEST_DATE}&group_id=1&page_number=3")
+    response = client.get(f"/get_test_results_by_day/?date={TEST_DATE}&group_id={setup_mock_data_for_results_by_day[0].id.hex()}&page_number=3")
 
     # Validate the response
     assert response.status_code == 200
     data = response.json()
 
-    print(f"Page 3 Results: {data['test_data']}")
     assert len(data["test_data"]) == 50  # Expect 50 unrun tests on the third page
     assert all(item["Status"] is None for item in data["test_data"])  # All should be unrun tests
 
@@ -187,16 +184,22 @@ def test_get_test_results_by_day_page_3(client, setup_mock_data_for_results_by_d
 @pytest.fixture(scope="function")
 def setup_mock_data_for_summary(db_session):
     # Set up two test groups
-    group_1 = TestGroup(id=1, name="Test Group 1", server="localhost", port=1234, schedule="16:00", tls=True)
-    group_2 = TestGroup(id=2, name="Test Group 2", server="127.0.0.1", port=5678, schedule="16:30", tls=False)
+    group_1_id = uuid4()
+    group_2_id = uuid4()
+
+    group_1 = TestGroup(id=group_1_id.bytes, name="Test Group 1", server="localhost", port=1234, schedule="16:00", tls=True)
+    group_2 = TestGroup(id=group_2_id.bytes, name="Test Group 2", server="127.0.0.1", port=5678, schedule="16:30", tls=False)
 
     db_session.add(group_1)
     db_session.add(group_2)
     db_session.commit()
 
     # Create TestCases for both groups
-    test_case_1 = TestCase(id=1, test_name="Test Case 1", group_id=1, test_code="print('Test 1')")
-    test_case_2 = TestCase(id=2, test_name="Test Case 2", group_id=2, test_code="print('Test 2')")
+    test_case_1_id = uuid4()
+    test_case_2_id = uuid4()
+
+    test_case_1 = TestCase(id=test_case_1_id.bytes, test_name="Test Case 1", group_id=group_1_id.bytes, test_code="print('Test 1')")
+    test_case_2 = TestCase(id=test_case_2_id.bytes, test_name="Test Case 2", group_id=group_2_id.bytes, test_code="print('Test 2')")
 
     db_session.add(test_case_1)
     db_session.add(test_case_2)
@@ -204,15 +207,15 @@ def setup_mock_data_for_summary(db_session):
 
     # Add TestResults for both groups
     test_result_1 = TestResult(
-        test_case_id=1,
-        group_id=1,
+        test_case_id=test_case_1_id.bytes,
+        group_id=group_1_id.bytes,
         date_run=datetime.strptime(TEST_DATE, '%d-%m-%Y').date(),
         time_taken=5.0,
         pass_status=True
     )
     test_result_2 = TestResult(
-        test_case_id=2,
-        group_id=2,
+        test_case_id=test_case_2_id.bytes,
+        group_id=group_2_id.bytes,
         date_run=datetime.strptime(TEST_DATE, '%d-%m-%Y').date(),
         time_taken=7.0,
         pass_status=False
@@ -233,8 +236,8 @@ def test_get_test_result_summary_with_results(client, setup_mock_data_for_summar
 
     # We expect two groups, with one passed test in group_1 and one failed test in group_2
     assert len(data["groups_data"]) == 2
-    group_1_data = next(group for group in data["groups_data"] if group["id"] == 1)
-    group_2_data = next(group for group in data["groups_data"] if group["id"] == 2)
+    group_1_data = next(group for group in data["groups_data"] if group["id"] == setup_mock_data_for_summary[0].id.hex())
+    group_2_data = next(group for group in data["groups_data"] if group["id"] == setup_mock_data_for_summary[1].id.hex())
 
     assert group_1_data["Passed"] == 1
     assert group_1_data["Failed"] == 0
@@ -256,3 +259,4 @@ def test_get_test_result_summary_no_results(client, setup_mock_data_for_summary)
     for group_data in data["groups_data"]:
         assert group_data["Passed"] == 0
         assert group_data["Failed"] == 0
+
