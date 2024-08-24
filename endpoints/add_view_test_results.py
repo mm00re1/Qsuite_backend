@@ -8,6 +8,7 @@ from typing import List, Optional
 import time
 from math import floor
 import logging
+from uuid import UUID
 
 from models.models import TestResult, TestCase, TestGroup
 from dependencies import get_db
@@ -19,7 +20,7 @@ router = APIRouter()
 
 
 @router.get("/get_test_results_30_days/")
-async def get_test_results_30_days(group_id: Optional[int] = None, db: Session = Depends(get_db)):
+async def get_test_results_30_days(group_id: Optional[UUID] = None, db: Session = Depends(get_db)):
     logger.info("get_test_results_30_days")
     stTime = time.time()
 
@@ -36,7 +37,7 @@ async def get_test_results_30_days(group_id: Optional[int] = None, db: Session =
     )
 
     if group_id:
-        query = query.filter(TestResult.group_id == group_id)
+        query = query.filter(TestResult.group_id == group_id.bytes)
 
     results_summary = query.group_by(TestResult.date_run).all()
 
@@ -55,7 +56,7 @@ async def get_test_results_30_days(group_id: Optional[int] = None, db: Session =
 @router.get("/get_test_results_by_day/")
 async def get_test_results_by_day(
     date: str,
-    group_id: int,
+    group_id: UUID,
     page_number: int = 1,
     sortOption: str = "",
     db: Session = Depends(get_db)
@@ -71,8 +72,8 @@ async def get_test_results_by_day(
     query = db.query(TestResult).join(TestCase).join(TestGroup).filter(
         TestResult.date_run == specific_date
     )
-
-    query = query.filter(TestCase.group_id == group_id)
+    
+    query = query.filter(TestCase.group_id == group_id.bytes)
 
     print("sort option: ", sortOption)
     print("page_number: ", page_number)
@@ -95,13 +96,13 @@ async def get_test_results_by_day(
     results_data = []
     for result in test_results:
         results_data.append({
-            'id': result.id,
-            'test_case_id': result.test_case_id,
+            'id': result.id.hex(),
+            'test_case_id': result.test_case_id.hex(),
             'Test Name': result.test_case.test_name,
             'Time Taken': result.time_taken,
             'Status': result.pass_status,
             'Error Message': result.error_message,
-            'group_id': result.test_case.group.id,
+            'group_id': result.test_case.group.id.hex(),
             'group_name': result.test_case.group.name,
             'time_run': result.time_run
         })
@@ -110,13 +111,13 @@ async def get_test_results_by_day(
         TestResult.date_run == specific_date
     ).distinct()
 
-    run_test_case_ids = run_test_case_ids.filter(TestCase.group_id == group_id)
+    run_test_case_ids = run_test_case_ids.filter(TestCase.group_id == group_id.bytes)
 
     run_test_case_ids = run_test_case_ids.subquery()
     select_run_test_case_ids = select(run_test_case_ids.c.test_case_id)
 
     unrun_tests_count = db.query(TestCase).filter(
-        TestCase.group_id == group_id,
+        TestCase.group_id == group_id.bytes,
         ~TestCase.id.in_(select_run_test_case_ids)
     ).count()
 
@@ -136,7 +137,7 @@ async def get_test_results_by_day(
 
         if unrun_limit > 0:
             unrun_tests_query = db.query(TestCase).filter(
-                TestCase.group_id == group_id,
+                TestCase.group_id == group_id.bytes,
                 ~TestCase.id.in_(select_run_test_case_ids)
             ).offset(unrun_offset).limit(unrun_limit)
 
@@ -147,12 +148,12 @@ async def get_test_results_by_day(
             for test in unrun_tests:
                 results_data.append({
                     'id': None,
-                    'test_case_id': test.id,
+                    'test_case_id': test.id.hex(),
                     'Test Name': test.test_name,
                     'Time Taken': None,
                     'Status': None,
                     'Error Message': None,
-                    'group_id': test.group.id,
+                    'group_id': test.group.id.hex(),
                     'group_name': test.group.name,
                     'time_run': None
                 })
@@ -201,17 +202,18 @@ async def get_test_result_summary(date: str, db: Session = Depends(get_db)):
     for group in test_groups:
         group_summary = summary_dict.get(group.id, {'passed': 0, 'failed': 0})
         groups_data.append({
-            "id": group.id,
+            "id": group.id.hex(),
             "Name": group.name,
             "Machine": group.server,
             "Port": group.port,
             "Scheduled": group.schedule,
             "Passed": group_summary['passed'],
             "Failed": group_summary['failed'],
-            "TLS":group.tls
+            "TLS": group.tls
         })
 
     column_list = ["Name", "Machine", "Port", "Scheduled", "Passed", "Failed", "TLS"]
     print("Total time taken: ", time.time() - stTime)
 
     return {"groups_data": groups_data, "columnList": column_list}
+
