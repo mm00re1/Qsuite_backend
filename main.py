@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup event
+    # Initialize database
+    Base.metadata.create_all(bind=engine)
     from endpoints.view_dates import initialize_cache
     logging.info("Initialising cache")
     initialize_cache()
@@ -42,9 +44,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Initialize database
-Base.metadata.create_all(bind=engine)
 
 # Include the routers
 app.include_router(view_dates.router)

@@ -100,8 +100,7 @@ def run_scheduled_test_group(test_group_id: int):
             start_time = datetime.utcnow()
             if test_case.free_form:
                 code_lines = test_case.test_code.split('\n\n')
-                kdbQuery = wrapQcode(code_lines)
-                result = sendFreeFormQuery(kdbQuery, test_group.server, test_group.port, test_group.tls, [])
+                result = sendFreeFormQuery(code_lines, test_group.server, test_group.port, test_group.tls)
             else:   # test is a predefined q function
                 result = sendFunctionalQuery(test_case.test_code, test_group.server, test_group.port, test_group.tls)
 

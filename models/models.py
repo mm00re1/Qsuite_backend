@@ -48,5 +48,3 @@ class TestDependency(Base):
     test = relationship('TestCase', foreign_keys=[test_id], backref='dependencies')
     dependent_test = relationship('TestCase', foreign_keys=[dependent_test_id], backref='dependents')
 
-# Create all tables
-Base.metadata.create_all(bind=engine)
