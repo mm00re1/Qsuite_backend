@@ -26,8 +26,7 @@ async def execute_q_code(request: QCodeRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="TestGroup not found")
 
     try:
-        kdbQuery = wrapQcode(request.code)
-        result = sendFreeFormQuery(kdbQuery, test_group.server, test_group.port, test_group.tls, [])
+        result = sendFreeFormQuery(request.code, test_group.server, test_group.port, test_group.tls)
         print(result)
         return result
 
