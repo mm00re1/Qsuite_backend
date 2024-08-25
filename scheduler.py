@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from models.models import engine, Base, TestGroup, TestCase, TestResult, SessionLocal
 from utils import parse_time_to_cron
-from KdbSubs import wrapQcode, sendFreeFormQuery, sendFunctionalQuery
+from KdbSubs import sendFreeFormQuery, sendFunctionalQuery
 
 # Set up logging configuration
 log_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
@@ -56,7 +56,7 @@ async def startup_event():
                     scheduler.add_job(
                         run_scheduled_test_group,
                         CronTrigger.from_crontab(f"{cron_time} * * *"),
-                        args=[test_group.id.bytes],
+                        args=[test_group.id],
                         id=str(test_group.id),
                         replace_existing=True
                     )
@@ -80,13 +80,13 @@ async def shutdown_event():
 
 def run_scheduled_test_group(test_group_id: bytes):
     """Runs scheduled tests for a given test group."""
-    logger.info(f"Running scheduled job for TestGroup ID: {UUID(bytes=test_group_id).hex()}")
+    logger.info(f"Running scheduled job for TestGroup ID: {UUID(bytes=test_group_id).hex}")
     session: Session = SessionLocal()
 
     try:
         test_group = session.query(TestGroup).filter(TestGroup.id == test_group_id).first()
         if not test_group:
-            logger.error(f"TestGroup ID {UUID(bytes=test_group_id).hex()} not found.")
+            logger.error(f"TestGroup ID {UUID(bytes=test_group_id).hex} not found.")
             return
 
         # Retrieve test cases for the group
@@ -145,7 +145,7 @@ def add_or_update_job(test_group_id: UUID):
                 scheduler.add_job(
                     run_scheduled_test_group,
                     CronTrigger.from_crontab(f"{cron_time} * * *"),
-                    args=[test_group.id.bytes],
+                    args=[test_group.id],
                     id=str(test_group.id.hex()),
                     replace_existing=True
                 )
@@ -153,13 +153,13 @@ def add_or_update_job(test_group_id: UUID):
             else:
                 logger.warning(f"Invalid schedule for TestGroup ID {test_group.id.hex()}. Job not added/updated.")
     except Exception as e:
-        logger.error(f"Error updating job for TestGroup ID {test_group_id.hex()}: {str(e)}")
+        logger.error(f"Error updating job for TestGroup ID {test_group_id.hex}: {str(e)}")
     finally:
         session.close()
 
 @app.post("/update_job/{test_group_id}")
 async def update_job(test_group_id: UUID):
-    logger.info("updating or adding job for test group: " + test_group_id.hex())
+    logger.info("updating or adding job for test group: " + test_group_id.hex)
     jobs = scheduler.get_jobs()
     logger.info(f"Total jobs scheduled: {len(jobs)}")
     add_or_update_job(test_group_id)
