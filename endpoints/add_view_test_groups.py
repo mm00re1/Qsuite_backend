@@ -29,7 +29,6 @@ class TestGroupCreate(BaseModel):
     port: int
     schedule: Optional[str] = None
     tls: bool
-    id: Optional[UUID] = None  # Allow specifying a UUID (e.g., in production)
 
 class TestGroupUpdate(BaseModel):
     name: Optional[str] = None
@@ -47,6 +46,57 @@ async def test_kdb_connection(test_group: ConnectionTest, db: Session = Depends(
         return {"message": "success", "details": result}
     except Exception as e:
         return {"message": "failed", "details": str(e)}
+
+
+@router.post("/upsert_test_group/{group_id}/")
+async def upsert_test_group(group_id: UUID, test_group: TestGroupCreate, db: Session = Depends(get_db)):
+    logger.info("upserting test group")
+
+    # Check if the group already exists
+    existing_group = db.get(TestGroup, group_id.bytes)
+    
+    if existing_group:
+        # Perform update logic
+        logger.info(f"Editing existing test group with ID {group_id.hex}")
+        if test_group.name is not None:
+            existing_group.name = test_group.name
+        if test_group.server is not None:
+            existing_group.server = test_group.server
+        if test_group.port is not None:
+            existing_group.port = test_group.port
+        if test_group.schedule is not None:
+            existing_group.schedule = test_group.schedule
+        if test_group.tls is not None:
+            existing_group.tls = test_group.tls
+
+        db.commit()
+
+    else:
+        # Perform creation logic
+        logger.info(f"Creating new test group with ID {group_id.hex}")
+        new_test_group = TestGroup(
+            id=group_id.bytes,  # Use the provided UUID
+            name=test_group.name,
+            server=test_group.server,
+            port=test_group.port,
+            schedule=test_group.schedule,
+            tls=test_group.tls
+        )
+        db.add(new_test_group)
+        db.commit()
+        db.refresh(new_test_group)
+
+    # Notify the scheduler to add the new job
+    try:
+        logger.info(f"Sending POST request to {SCHEDULER_URL}/update_job/{group_id.hex}")
+        response = requests.post(f"{SCHEDULER_URL}/update_job/{group_id.hex}")
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Failed to update scheduler")
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Scheduler communication error: {e}")
+
+    return {"message": "Test group upserted successfully", "id": group_id.hex}
+
 
 @router.post("/add_test_group/")
 async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_db)):
@@ -67,7 +117,7 @@ async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_
 
     # Notify the scheduler to add the new job
     try:
-        response = requests.post(f"{SCHEDULER_URL}/update_job/{new_test_group.id.hex()}")
+        response = requests.post(f"{SCHEDULER_URL}/update_job/{new_test_group.id.hex}")
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail="Failed to update scheduler")
     except requests.exceptions.RequestException as e:
