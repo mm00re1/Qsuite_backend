@@ -53,37 +53,6 @@ async def get_test_results_30_days(group_id: Optional[UUID] = None, db: Session 
     return results_data
 
 
-@router.get("/get_test_ids/")
-async def get_test_ids(
-    group_id: UUID,
-    db: Session = Depends(get_db)
-):
-    logger.info("get_test_ids")
-    stTime = time.time()
-
-    # Querying the TestCase table to get tests that belong to the specified group_id
-    try:
-        test_cases = db.query(TestCase).filter(TestCase.group_id == group_id.bytes).all()
-    except Exception as e:
-        logger.error(f"Error fetching test cases: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
-
-    # Formatting the response to include only id, Test Name, and Creation Date
-    results_data = []
-    for test in test_cases:
-        results_data.append({
-            'id': test.id.hex(),
-            'Test Name': test.test_name,
-            'Creation Date': test.creation_date
-        })
-
-    logger.info(f"timeTaken for db query: {time.time() - stTime}")
-
-    return {
-        "test_data": results_data,
-    }
-    
-
 @router.get("/get_test_results_by_day/")
 async def get_test_results_by_day(
     date: str,
