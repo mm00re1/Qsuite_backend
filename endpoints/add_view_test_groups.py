@@ -156,6 +156,25 @@ async def edit_test_group(id: UUID, test_group: TestGroupUpdate, db: Session = D
 
     return {"message": "Test group updated successfully"}
 
+@router.delete("/delete_test_group/{id}/")
+async def delete_test_group(id: UUID, db: Session = Depends(get_db)):
+    logger.info(f"deleting test group with id: {id}")
+    test_group_obj = db.get(TestGroup, id.bytes)
+    if not test_group_obj:
+        raise HTTPException(status_code=404, detail="Test group not found")
+
+    db.delete(test_group_obj)
+    db.commit()
+
+    # Notify the scheduler to remove the job
+    try:
+        response = requests.delete(f"{SCHEDULER_URL}/remove_job/{id.hex}")
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Failed to update scheduler")
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Scheduler communication error: {e}")
+
+    return {"message": "Test group deleted successfully"}
 
 @router.get("/test_groups/")
 async def get_test_groups(db: Session = Depends(get_db)):

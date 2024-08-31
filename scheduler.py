@@ -56,8 +56,8 @@ async def startup_event():
                     scheduler.add_job(
                         run_scheduled_test_group,
                         CronTrigger.from_crontab(f"{cron_time} * * *"),
-                        args=[test_group.id],
-                        id=str(test_group.id),
+                        args=[UUID(test_group.id.hex())],
+                        id=test_group.id.hex(),
                         replace_existing=True
                     )
                     logger.info(f"Scheduled job for TestGroup ID {test_group.id.hex()} at {cron_time} * * *")
@@ -78,19 +78,19 @@ async def shutdown_event():
     logger.info("Shutting down scheduler")
     scheduler.shutdown()
 
-def run_scheduled_test_group(test_group_id: bytes):
+def run_scheduled_test_group(test_group_id: UUID):
     """Runs scheduled tests for a given test group."""
-    logger.info(f"Running scheduled job for TestGroup ID: {UUID(bytes=test_group_id).hex}")
+    logger.info(f"Running scheduled job for TestGroup ID: {test_group_id.hex}")
     session: Session = SessionLocal()
 
     try:
-        test_group = session.query(TestGroup).filter(TestGroup.id == test_group_id).first()
+        test_group = session.query(TestGroup).filter(TestGroup.id == test_group_id.bytes).first()
         if not test_group:
-            logger.error(f"TestGroup ID {UUID(bytes=test_group_id).hex} not found.")
+            logger.error(f"TestGroup ID {test_group_id.hex} not found.")
             return
 
         # Retrieve test cases for the group
-        test_cases = session.query(TestCase).filter(TestCase.group_id == test_group_id).all()
+        test_cases = session.query(TestCase).filter(TestCase.group_id == test_group_id.bytes).all()
 
         for test_case in test_cases:
             start_time = datetime.utcnow()
@@ -110,7 +110,7 @@ def run_scheduled_test_group(test_group_id: bytes):
 
             test_result = TestResult(
                 test_case_id=test_case.id,
-                group_id=test_group_id,
+                group_id=test_group_id.bytes,
                 date_run=datetime.utcnow().date(),
                 time_run=datetime.utcnow().time(),
                 time_taken=time_taken,
@@ -145,13 +145,13 @@ def add_or_update_job(test_group_id: UUID):
                 scheduler.add_job(
                     run_scheduled_test_group,
                     CronTrigger.from_crontab(f"{cron_time} * * *"),
-                    args=[test_group.id],
-                    id=str(test_group.id.hex()),
+                    args=[test_group_id],
+                    id=test_group_id.hex,
                     replace_existing=True
                 )
-                logger.info(f"Updated job for TestGroup ID {test_group.id.hex()} at {cron_time} * * *")
+                logger.info(f"Updated job for TestGroup ID {test_group_id.hex} at {cron_time} * * *")
             else:
-                logger.warning(f"Invalid schedule for TestGroup ID {test_group.id.hex()}. Job not added/updated.")
+                logger.warning(f"Invalid schedule for TestGroup ID {test_group_id.hex}. Job not added/updated.")
     except Exception as e:
         logger.error(f"Error updating job for TestGroup ID {test_group_id.hex}: {str(e)}")
     finally:
@@ -170,3 +170,14 @@ async def update_job(test_group_id: UUID):
     for job in jobs:
         logger.info(f"Job ID: {job.id}")
 
+@app.delete("/remove_job/{test_group_id}")
+async def remove_job(test_group_id: UUID):
+    try:
+        scheduler.remove_job(test_group_id.hex)
+        logger.info(f"Removed job for TestGroup ID {test_group_id.hex}")
+        jobs = scheduler.get_jobs()
+        logger.info(f"Total jobs scheduled: {len(jobs)}")
+        return {"message": f"Job for TestGroup ID {test_group_id.hex} removed successfully"}
+    except Exception as e:
+        logger.error(f"Error removing job for TestGroup ID {test_group_id.hex}: {str(e)}")
+        raise HTTPException(status_code=404, detail=f"Job for TestGroup ID {test_group_id.hex} not found")

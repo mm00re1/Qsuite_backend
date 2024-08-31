@@ -25,6 +25,7 @@ class TestCaseEdit(BaseModel):
     id: UUID
     test_name: Optional[str] = None
     test_code: Optional[str] = None
+    group_id: Optional[UUID] = None
     dependencies: List[UUID] = []
 
 
@@ -87,6 +88,9 @@ async def edit_test_case(test_case: TestCaseEdit, db: Session = Depends(get_db))
         test_case_obj.test_name = test_case.test_name
     if test_case.test_code:
         test_case_obj.test_code = test_case.test_code
+    if test_case.group_id:
+        test_case_obj.group_id = test_case.group_id.bytes
+    
     test_case_obj.last_modified_date = datetime.utcnow()
 
     db.commit()  # Commit the changes to the test case

@@ -53,6 +53,37 @@ async def get_test_results_30_days(group_id: Optional[UUID] = None, db: Session 
     return results_data
 
 
+@router.get("/get_test_ids/")
+async def get_test_ids(
+    group_id: UUID,
+    db: Session = Depends(get_db)
+):
+    logger.info("get_test_ids")
+    stTime = time.time()
+
+    # Querying the TestCase table to get tests that belong to the specified group_id
+    try:
+        test_cases = db.query(TestCase).filter(TestCase.group_id == group_id.bytes).all()
+    except Exception as e:
+        logger.error(f"Error fetching test cases: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+    # Formatting the response to include only id, Test Name, and Creation Date
+    results_data = []
+    for test in test_cases:
+        results_data.append({
+            'id': test.id.hex(),
+            'Test Name': test.test_name,
+            'Creation Date': test.creation_date
+        })
+
+    logger.info(f"timeTaken for db query: {time.time() - stTime}")
+
+    return {
+        "test_data": results_data,
+    }
+    
+
 @router.get("/get_test_results_by_day/")
 async def get_test_results_by_day(
     date: str,
@@ -69,7 +100,7 @@ async def get_test_results_by_day(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format, should be DD-MM-YYYY")
 
-    query = db.query(TestResult).join(TestCase).join(TestGroup).filter(
+    query = db.query(TestResult, TestCase.creation_date).join(TestCase).join(TestGroup).filter(
         TestResult.date_run == specific_date
     )
     
@@ -94,7 +125,7 @@ async def get_test_results_by_day(
     stTime = time.time()
 
     results_data = []
-    for result in test_results:
+    for result, creation_date in test_results:
         results_data.append({
             'id': result.id.hex(),
             'test_case_id': result.test_case_id.hex(),
@@ -104,7 +135,8 @@ async def get_test_results_by_day(
             'Error Message': result.error_message,
             'group_id': result.test_case.group.id.hex(),
             'group_name': result.test_case.group.name,
-            'time_run': result.time_run
+            'time_run': result.time_run,
+            'Creation Date': creation_date
         })
 
     run_test_case_ids = db.query(TestResult.test_case_id).join(TestCase).filter(
@@ -155,7 +187,8 @@ async def get_test_results_by_day(
                     'Error Message': None,
                     'group_id': test.group.id.hex(),
                     'group_name': test.group.name,
-                    'time_run': None
+                    'time_run': None,
+                    'Creation Date': test.creation_date
                 })
 
     column_list = ["Test Name", "Time Taken", "Status", "Error Message"]
