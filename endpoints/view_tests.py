@@ -141,7 +141,7 @@ async def view_test_code(
         return {"success": False, "results": [], "message": "Kdb Error while reading code for function '" + test_name + "' => " + str(e)}
 
 
-@router.get("/get_test_ids/")
+@router.get("/get_tests_per_group/")
 async def get_test_ids(
     group_id: UUID,
     db: Session = Depends(get_db)
@@ -149,67 +149,44 @@ async def get_test_ids(
     logger.info("get_test_ids")
     stTime = time.time()
 
-    # Querying the TestCase table to get tests that belong to the specified group_id
+    # Check if the group_id is in the TestGroup table
+    test_group = db.query(TestGroup).filter(TestGroup.id == group_id.bytes).first()
+    if not test_group:
+        raise HTTPException(status_code=404, detail="TestGroup not found")
+
     try:
+        # Query all test cases for the group
         test_cases = db.query(TestCase).filter(TestCase.group_id == group_id.bytes).all()
-    except Exception as e:
-        logger.error(f"Error fetching test cases: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
 
-    # Formatting the response to include only id, Test Name, and Creation Date
-    results_data = []
-    for test in test_cases:
-        results_data.append({
-            'test_case_id': test.id.hex(),
-            'Test Name': test.test_name,
-            'Creation Date': test.creation_date
-        })
+        # Get all test IDs
+        test_ids = [test.id for test in test_cases]
 
-    logger.info(f"timeTaken for db query: {time.time() - stTime}")
+        # Query all dependencies for these tests in a single query
+        dependencies = db.query(TestDependency).filter(TestDependency.test_id.in_(test_ids)).all()
 
-    return {
-        "test_data": results_data,
-    }
+        # Create a dictionary to store dependencies for each test
+        dependency_map = {test_id: [] for test_id in test_ids}
+        for dep in dependencies:
+            dependency_map[dep.test_id].append(dep.dependent_test_id.hex())
 
-
-class TestCasesWithDependencies(BaseModel):
-    test_ids: List[UUID] = []
-
-@router.post("/get_tests_with_dependencies/")
-async def get_tests_with_dependencies(test_data: TestCasesWithDependencies, db: Session = Depends(get_db)):
-    logger.info("get_tests_with_dependencies")
-    stTime = time.time()
-    test_ids = test_data.test_ids
-
-    try:
-        # Query the TestCase table to get the tests that match the provided test_ids
-        test_cases = db.query(TestCase).filter(TestCase.id.in_([test_id.bytes for test_id in test_ids])).all()
-
-        if not test_cases:
-            raise HTTPException(status_code=404, detail="No test cases found for the provided test_ids")
-
+        # Format the response with all information including dependencies
         results_data = []
-
         for test in test_cases:
-            # Query TestDependency to get dependencies for each test case
-            dependencies = db.query(TestDependency).filter(TestDependency.test_id == test.id).all()
-            dependency_ids = [dep.dependent_test_id.hex() for dep in dependencies]
-
-            # Append test data along with its dependencies
             results_data.append({
                 'test_case_id': test.id.hex(),
-                'test_name': test.test_name,
+                'Test Name': test.test_name,
+                'Creation Date': test.creation_date,
                 'free_form': test.free_form,
                 'test_code': test.test_code,
-                'dependencies': dependency_ids
+                'dependencies': dependency_map[test.id]
             })
 
-        logger.info(f"timeTaken for get_tests_with_dependencies query: {time.time() - stTime}")
+        logger.info(f"timeTaken for db query: {time.time() - stTime}")
 
         return {
             "test_data": results_data,
         }
 
     except Exception as e:
-        logger.error(f"Error retrieving test cases and dependencies: {e}")
+        logger.error(f"Error fetching test cases and dependencies: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
