@@ -52,9 +52,16 @@ async def test_kdb_connection(test_group: ConnectionTest, db: Session = Depends(
 async def upsert_test_group(group_id: UUID, test_group: TestGroupCreate, db: Session = Depends(get_db)):
     logger.info("upserting test group")
 
+    # Check if another group with the same name already exists
+    existing_group_with_name = db.query(TestGroup).filter(
+        TestGroup.name == test_group.name,
+        TestGroup.id != group_id.bytes
+    ).first()
+    if existing_group_with_name:
+        raise HTTPException(status_code=400, detail="A test group with this name already exists")
+
     # Check if the group already exists
     existing_group = db.get(TestGroup, group_id.bytes)
-    
     if existing_group:
         # Perform update logic
         logger.info(f"Editing existing test group with ID {group_id.hex}")

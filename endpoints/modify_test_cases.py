@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# ... existing imports and code ...
 
 class TestCaseUpsert(BaseModel):
     id: UUID
@@ -28,6 +27,15 @@ class TestCaseUpsert(BaseModel):
 async def upsert_test_case(test_case: TestCaseUpsert, db: Session = Depends(get_db)):
     logger.info("upsert_test_case")
     start_time = time.time()
+
+    # Check if a test case with the same name already exists (excluding the current test case)
+    existing_name = db.query(TestCase).filter(
+        TestCase.test_name == test_case.test_name,
+        TestCase.id != test_case.id.bytes
+    ).first()
+
+    if existing_name:
+        raise HTTPException(status_code=400, detail="A test case with this name already exists")
 
     existing_test_case = db.get(TestCase, test_case.id.bytes)
 
