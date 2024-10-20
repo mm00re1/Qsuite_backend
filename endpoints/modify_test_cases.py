@@ -74,3 +74,26 @@ async def upsert_test_case(test_case: TestCaseUpsert, db: Session = Depends(get_
     print("time taken to upsert test case: ", time.time() - start_time)
     return {"message": message, "id": existing_test_case.id.hex()}
 
+
+@router.delete("/delete_test_case/{test_case_id}")
+async def delete_test_case(test_case_id: UUID, db: Session = Depends(get_db)):
+    logger.info(f"Deleting test case with ID: {test_case_id}")
+    start_time = time.time()
+
+    test_case = db.get(TestCase, test_case_id.bytes)
+
+    if not test_case:
+        raise HTTPException(status_code=404, detail="Test case not found")
+
+    # Delete associated dependencies
+    db.query(TestDependency).filter(
+        (TestDependency.test_id == test_case_id.bytes) | 
+        (TestDependency.dependent_test_id == test_case_id.bytes)
+    ).delete()
+
+    # Delete the test case
+    db.delete(test_case)
+    db.commit()
+
+    print(f"Time taken to delete test case: {time.time() - start_time}")
+    return {"message": "Test case deleted successfully"}
