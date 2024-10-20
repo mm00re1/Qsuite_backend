@@ -2,7 +2,6 @@ from fastapi import HTTPException, status
 
 class BadCredentialsException(HTTPException):
     def __init__(self, detail: str = "Bad credentials"):
-        # Pass the custom message (detail) to the parent class
         super().__init__(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=detail
