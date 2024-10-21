@@ -12,6 +12,18 @@ from models.models import engine, Base, TestGroup, TestCase, TestResult, Session
 from utils import parse_time_to_cron
 from KdbSubs import sendFreeFormQuery, sendFunctionalQuery
 
+if os.getenv('DOCKER_ENV') == 'true':
+    MAIN_URL = "http://main:8000"
+    # Path to the shared file to let main know when to refresh the cache
+    flag_file = "/app/shared_cache/refresh_flag.txt"
+else:
+    MAIN_URL = "http://localhost:8000"
+    flag_file = "./cache/refresh_flag.txt"
+
+def set_cache_refresh_flag():
+    with open(flag_file, "w") as f:
+        f.write("1")  # Set to "1" to indicate cache should be refreshed
+
 # Set up logging configuration
 log_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 os.makedirs(log_directory, exist_ok=True)
@@ -123,11 +135,8 @@ def run_scheduled_test_group(test_group_id: UUID):
 
         # After committing new test results, trigger cache refresh
         try:
-            response = requests.post("http://127.0.0.1:8000/refresh_cache/")
-            if response.status_code == 200:
-                logger.info("Cache refreshed successfully.")
-            else:
-                logger.error(f"Failed to refresh cache. Status code: {response.status_code}")
+            set_cache_refresh_flag()
+            logger.info("Cache refreshed successfully.")
         except Exception as e:
             logger.error(f"Error refreshing cache: {str(e)}")
 

@@ -1,0 +1,20 @@
+# Use an official Python runtime as a parent image
+FROM python:3.10-slim
+
+# Set the working directory to /app
+WORKDIR /app
+
+# Copy the requirements file into the container
+COPY app/requirements.txt .
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the entire app directory into the container
+COPY app/ /app/
+
+# Expose the port that the scheduler app runs on
+EXPOSE 8001
+
+# Command to run the scheduler app using Gunicorn
+CMD ["gunicorn", "--workers", "1", "--bind", "0.0.0.0:8001", "--config", "config/gunicorn_scheduler.conf.py", "scheduler:app"]

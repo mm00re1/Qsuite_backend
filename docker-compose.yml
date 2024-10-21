@@ -1,0 +1,31 @@
+services:
+  main:
+    build:
+      context: .
+      dockerfile: Dockerfile_main
+    container_name: main_app
+    ports:
+      - "8000:8000"
+    volumes:
+      - app_instance:/app/instance
+      - shared_cache:/app/shared_cache
+    environment:
+      - DOCKER_ENV=true
+    depends_on:
+      - scheduler
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile_scheduler
+    container_name: scheduler_app
+    volumes:
+      - app_instance:/app/instance
+      - shared_cache:/app/shared_cache
+    environment:
+      - DOCKER_ENV=true
+
+volumes:
+  app_instance:
+  shared_cache:
+

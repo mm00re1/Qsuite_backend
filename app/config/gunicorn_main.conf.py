@@ -7,7 +7,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 log_directory = os.path.join(BASE_DIR, "logs")
 os.makedirs(log_directory, exist_ok=True)
 
-log_file_path = os.path.join(log_directory, "http_app.log")
+log_file_path = os.path.join(log_directory, "main_app.log")
 
 bind = "0.0.0.0:8000"
 workers = 4  # Number of worker processes
