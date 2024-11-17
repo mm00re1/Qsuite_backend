@@ -78,7 +78,7 @@ async def startup_event():
         # Add the job for creating backups of the db
         scheduler.add_job(
             backup_and_cleanup,
-            CronTrigger(hour=12, minute=29),  # Runs at midnight
+            CronTrigger(hour=00, minute=00),  # Runs at midnight
             id="database_backup",
             replace_existing=True
         )
