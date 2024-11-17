@@ -7,8 +7,10 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - app_instance:/app/instance
-      - shared_cache:/app/shared_cache
+      - ./instance:/instance
+      - ./cache:/cache
+      - ./logs:/logs
+      - ./secrets:/secrets
     environment:
       - DOCKER_ENV=true
     depends_on:
@@ -20,12 +22,11 @@ services:
       dockerfile: Dockerfile_scheduler
     container_name: scheduler_app
     volumes:
-      - app_instance:/app/instance
-      - shared_cache:/app/shared_cache
+      - ./instance:/instance
+      - ./cache:/cache
+      - ./backups:/backups
+      - ./logs:/logs
+      - ./secrets:/secrets
     environment:
       - DOCKER_ENV=true
-
-volumes:
-  app_instance:
-  shared_cache:
 

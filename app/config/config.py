@@ -4,17 +4,14 @@ from pydantic import validator
 
 PAGE_SIZE = 50
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 SQLALCHEMY_DATABASE_URI = f'sqlite:///{os.path.join(BASE_DIR, "instance/test_platform.db")}'
-CACHE_PATH = os.path.join(BASE_DIR, "cache/unique_dates.json")
+CACHE_PATH = os.path.join(BASE_DIR, "cache/")
 
 if os.getenv('DOCKER_ENV') == 'true':
     SCHEDULER_URL = "http://scheduler:8001"
-    # Path to the shared file to let main know when to refresh the cache
-    flag_file = "/app/shared_cache/refresh_flag.txt"
 else:
     SCHEDULER_URL = "http://localhost:8001"
-    flag_file = "./cache/refresh_flag.txt"
 
 
 class Settings(BaseSettings):

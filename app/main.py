@@ -6,9 +6,10 @@ from config.config import BASE_DIR
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from models.models import engine, Base
-from endpoints import view_dates, modify_test_cases, add_view_test_results, add_view_test_groups, search_tests, view_tests, run_q_code
+from endpoints import view_dates, modify_test_cases, add_view_test_results, add_view_test_groups, search_tests, view_tests, run_q_code, connection_details
 #import secure
 from dependencies import PermissionsValidator, validate_token
+from encryption_utils import generate_key
 
 log_directory = os.path.join(BASE_DIR, "logs")
 log_file_path = os.path.join(log_directory, "app.log")
@@ -46,6 +47,10 @@ async def lifespan(app: FastAPI):
     from endpoints.view_dates import initialize_cache
     logging.info("Initialising cache")
     initialize_cache()
+    secret_key_path = os.path.join(BASE_DIR, "secrets/secret.key")
+    if not os.path.exists(secret_key_path):
+        generate_key()
+        logging.info("Encryption key generated and stored securely.")
 
     # Yield control back to the app (this starts the app)
     yield
@@ -87,3 +92,4 @@ app.include_router(add_view_test_groups.router, dependencies=[Depends(Permission
 app.include_router(search_tests.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
 app.include_router(view_tests.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
 app.include_router(run_q_code.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
+app.include_router(connection_details.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])

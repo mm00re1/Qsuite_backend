@@ -5,12 +5,30 @@ from qpython.qcollection import QTable
 from queue import Queue
 import numpy as np
 from custom_config_load import *
+from encryption_utils import load_credentials
 
 config = load_config()
 custom_ca = config['security']['custom_ca_path']
 
+def make_kdb_conn(host, port, tls, timeout):
+    credentials = load_credentials()
+    method = credentials.get('method')
+    if method == 'User/Password':
+        username = credentials.get('username')
+        password = credentials.get('password')
+        return QConnection(host=host, port=port, username = username, password = password, tls_enabled=tls, timeout = timeout, custom_ca = custom_ca)
+    elif method == 'Azure Oauth':
+        # add proper logic later
+        #client_id = credentials.get('client_id')
+        #client_secret = credentials.get('client_secret')
+        # Use client_id and client_secret to obtain token and connect
+        return QConnection(host=host, port=port, tls_enabled=tls, timeout = 10, custom_ca = custom_ca)
+    else:
+        raise ValueError("Unsupported connection method.")
+    # ....
+
 def sendFreeFormQuery(code, host, port, tls):
-    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10, custom_ca = custom_ca)
+    q = make_kdb_conn(host, port, tls, 10)
     try:
         q.open()
         response = q.sendSync('.qsuite.executeUserCode', ''.join(code))
@@ -32,7 +50,7 @@ def sendFreeFormQuery(code, host, port, tls):
     return res
 
 def sendFunctionalQuery(kdbFunction, host, port, tls):
-    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10, custom_ca = custom_ca)
+    q = make_kdb_conn(host, port, tls, 10)
     try:
         q.open()
         response = q.sendSync('.qsuite.executeFunction', kdbFunction)
@@ -54,14 +72,14 @@ def sendFunctionalQuery(kdbFunction, host, port, tls):
     return res
 
 def sendKdbQuery(kdbFunction, host, port, tls, *args):
-    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 10, custom_ca = custom_ca)
+    q = make_kdb_conn(host, port, tls, 10)
     q.open()
     res = q.sendSync(kdbFunction, *args)
     q.close()
     return res
 
 def test_kdb_conn(host, port, tls):
-    q = QConnection(host=host, port=port, tls_enabled=tls, timeout = 5, custom_ca = custom_ca)
+    q = make_kdb_conn(host, port, tls, 5)
     q.open()
     q.close()
     #throws exception if it times out or port doesn't exist
