@@ -7,7 +7,7 @@ import logging
 import os
 from datetime import timedelta
 from models.models import SessionLocal, TestResult
-from config.config import CACHE_PATH, flag_file
+from config.config import CACHE_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ router = APIRouter()
 
 def write_cache_to_disk(cache):
     # Open the file and acquire an exclusive lock (blocking)
-    with open(CACHE_PATH, 'w') as cache_file:
+    with open(CACHE_PATH + "unique_dates.json", 'w') as cache_file:
         fcntl.flock(cache_file, fcntl.LOCK_EX)  # Acquire an exclusive lock
         try:
             json.dump(cache, cache_file)  # Write cache to file
@@ -54,21 +54,21 @@ def initialize_cache():
 
 def check_and_refresh_cache():
     # Check if the flag is set
-    if os.path.exists(flag_file):
-        with open(flag_file, "r") as f:
+    if os.path.exists(CACHE_PATH + "refresh_flag.txt"):
+        with open(CACHE_PATH + "refresh_flag.txt", "r") as f:
             flag = f.read()
         if flag == "1":
             # Refresh the cache
             initialize_cache()
 
             # Reset the flag after refreshing the cache
-            with open(flag_file, "w") as f:
+            with open(CACHE_PATH + "refresh_flag.txt", "w") as f:
                 f.write("0")
 
 def get_dates_from_disk():
     check_and_refresh_cache()
-    if os.path.exists(CACHE_PATH):
-        with open(CACHE_PATH, 'r') as cache_file:
+    if os.path.exists(CACHE_PATH + "unique_dates.json"):
+        with open(CACHE_PATH + "unique_dates.json", 'r') as cache_file:
             return json.load(cache_file)
     return None
 

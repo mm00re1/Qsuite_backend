@@ -3,24 +3,15 @@ import os
 import gzip
 import shutil
 import datetime
-import logging
 from config.config import BASE_DIR
 
-# Configuration
 DB_PATH = os.path.join(BASE_DIR, "instance/test_platform.db")
 BACKUP_DIR = os.path.join(BASE_DIR, "backups")
 DAILY_BACKUP_RETENTION = 3  # Keep last 3 daily backups
 WEEKLY_BACKUP_RETENTION = 4  # Keep last 4 weekly backups (30 days)
-LOG_FILE = os.path.join(BASE_DIR, "logs/backups.log")
 
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
-def perform_backup():
-    logging.info("Starting backup process.")
+def perform_backup(logger):
+    logger.info("Starting backup process.")
     # Connect to the database
     con = sqlite3.connect(DB_PATH)
 
@@ -30,6 +21,7 @@ def perform_backup():
         result = cursor.execute('PRAGMA integrity_check;').fetchall()
 
         if result[0][0] != 'ok':
+            logger.error('Database integrity check failed: %s', result)
             print('Database integrity check failed:', result)
             return
 
@@ -53,16 +45,19 @@ def perform_backup():
         # Remove the uncompressed backup file
         os.remove(backup_filepath)
 
+        logger.info('Backup completed successfully: %s', compressed_backup_filepath)
         print('Backup completed successfully:', compressed_backup_filepath)
 
     except sqlite3.Error as e:
+        logger.error('SQLite error during backup: %s', e)
         print('SQLite error:', e)
 
     finally:
         # Close the connection
         con.close()
 
-def cleanup_old_backups():
+def cleanup_old_backups(logger):
+    logger.info("Starting cleanup of old backups.")
     # Get current date
     now = datetime.datetime.now()
 
@@ -93,8 +88,8 @@ def cleanup_old_backups():
     # Delete old backups
     for backup_file in daily_backups_to_delete + weekly_backups_to_delete:
         os.remove(os.path.join(BACKUP_DIR, backup_file))
+        logger.info('Deleted old backup: %s', backup_file)
         print('Deleted old backup:', backup_file)
 
-if __name__ == '__main__':
-    perform_backup()
-    cleanup_old_backups()
+    logger.info("Cleanup of old backups completed.")
+

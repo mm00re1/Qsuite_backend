@@ -10,22 +10,21 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from models.models import engine, Base, TestGroup, TestCase, TestResult, SessionLocal
 from utils import parse_time_to_cron
+from config.config import BASE_DIR, CACHE_PATH
 from KdbSubs import sendFreeFormQuery, sendFunctionalQuery
+from backup_db import perform_backup, cleanup_old_backups
 
 if os.getenv('DOCKER_ENV') == 'true':
     MAIN_URL = "http://main:8000"
-    # Path to the shared file to let main know when to refresh the cache
-    flag_file = "/app/shared_cache/refresh_flag.txt"
 else:
     MAIN_URL = "http://localhost:8000"
-    flag_file = "./cache/refresh_flag.txt"
 
 def set_cache_refresh_flag():
-    with open(flag_file, "w") as f:
+    with open(CACHE_PATH + "refresh_flag.txt", "w") as f:
         f.write("1")  # Set to "1" to indicate cache should be refreshed
 
 # Set up logging configuration
-log_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+log_directory = os.path.join(BASE_DIR, "logs")
 os.makedirs(log_directory, exist_ok=True)
 
 log_file_path = os.path.join(log_directory, "scheduler.log")
@@ -75,6 +74,16 @@ async def startup_event():
                     logger.info(f"Scheduled job for TestGroup ID {test_group.id.hex()} at {cron_time} * * *")
                 else:
                     logger.warning(f"Skipping TestGroup ID {test_group.id.hex()} due to invalid schedule.")
+
+        # Add the job for creating backups of the db
+        scheduler.add_job(
+            backup_and_cleanup,
+            CronTrigger(hour=12, minute=29),  # Runs at midnight
+            id="database_backup",
+            replace_existing=True
+        )
+        logger.info("Scheduled daily database backup job at midnight.")
+
     except Exception as e:
         logger.error(f"Error scheduling jobs: {str(e)}")
     finally:
@@ -89,6 +98,12 @@ async def shutdown_event():
     """Shut down the scheduler on app shutdown."""
     logger.info("Shutting down scheduler")
     scheduler.shutdown()
+
+
+def backup_and_cleanup():
+    """Performs database backup and cleans up old backups."""
+    perform_backup(logger)
+    cleanup_old_backups(logger)
 
 def run_scheduled_test_group(test_group_id: UUID):
     """Runs scheduled tests for a given test group."""
