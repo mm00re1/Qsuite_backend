@@ -1,5 +1,6 @@
 import os
 from fastapi import Depends, FastAPI
+from filelock import FileLock
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from config.config import BASE_DIR
@@ -10,6 +11,8 @@ from endpoints import view_dates, modify_test_cases, add_view_test_results, add_
 #import secure
 from dependencies import PermissionsValidator, validate_token
 from encryption_utils import generate_key
+
+OAUTH_ACTIVE = False # Oauth logic uses auth0
 
 log_directory = os.path.join(BASE_DIR, "logs")
 log_file_path = os.path.join(log_directory, "app.log")
@@ -24,6 +27,8 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+lock_file_path = os.path.join(BASE_DIR, "init_db.lock")
 
 #csp = secure.ContentSecurityPolicy().default_src("'self'").frame_ancestors("'none'")
 ##hsts = secure.StrictTransportSecurity().max_age(31536000).include_subdomains()
@@ -42,11 +47,17 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup event
-    # Initialize database
-    Base.metadata.create_all(bind=engine)
+    # Use a file-based lock to ensure only one worker initializes the database
+    lock = FileLock(lock_file_path)
+    with lock:
+        logging.info("Acquiring lock for database initialization...")
+        Base.metadata.create_all(bind=engine)
+        logging.info("Database initialized successfully.")
+
     from endpoints.view_dates import initialize_cache
-    logging.info("Initialising cache")
+    logging.info("Initializing cache...")
     initialize_cache()
+
     secret_key_path = os.path.join(BASE_DIR, "secrets/secret.key")
     if not os.path.exists(secret_key_path):
         generate_key()
@@ -84,12 +95,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include the routers
-app.include_router(view_dates.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
-app.include_router(modify_test_cases.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
-app.include_router(add_view_test_results.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
-app.include_router(add_view_test_groups.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
-app.include_router(search_tests.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
-app.include_router(view_tests.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
-app.include_router(run_q_code.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
-app.include_router(connection_details.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
+# Include the routers, commented out with oauth protection
+if OAUTH_ACTIVE:
+    app.include_router(view_dates.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
+    app.include_router(modify_test_cases.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
+    app.include_router(add_view_test_results.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
+    app.include_router(add_view_test_groups.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
+    app.include_router(search_tests.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
+    app.include_router(view_tests.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
+    app.include_router(run_q_code.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
+    app.include_router(connection_details.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
+
+else:
+    app.include_router(view_dates.router)
+    app.include_router(modify_test_cases.router)
+    app.include_router(add_view_test_results.router)
+    app.include_router(add_view_test_groups.router)
+    app.include_router(search_tests.router)
+    app.include_router(view_tests.router)
+    app.include_router(run_q_code.router)
+    app.include_router(connection_details.router)

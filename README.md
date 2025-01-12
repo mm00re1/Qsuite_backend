@@ -1,2 +1,2 @@
 # Qsuite_backend
-flaks api backend for Qsuite application
+fastapi backend for Qsuite application

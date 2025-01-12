@@ -17,12 +17,12 @@ def make_kdb_conn(host, port, tls, timeout):
         username = credentials.get('username')
         password = credentials.get('password')
         return QConnection(host=host, port=port, username = username, password = password, tls_enabled=tls, timeout = timeout, custom_ca = custom_ca)
-    elif method == 'Azure Oauth':
+    #elif method == 'Azure Oauth':
         # add proper logic later
         #client_id = credentials.get('client_id')
         #client_secret = credentials.get('client_secret')
         # Use client_id and client_secret to obtain token and connect
-        return QConnection(host=host, port=port, tls_enabled=tls, timeout = 10, custom_ca = custom_ca)
+        #return QConnection(host=host, port=port, tls_enabled=tls, timeout = 10, custom_ca = custom_ca)
     else:
         raise ValueError("Unsupported connection method.")
     # ....

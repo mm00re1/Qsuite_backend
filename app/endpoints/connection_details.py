@@ -18,7 +18,7 @@ class ConnectionCredentialsInput(BaseModel):
 async def store_credentials(credentials: ConnectionCredentialsInput):
     # Validate input
     print("storing credentials: ", credentials)
-    if credentials.method not in ['User/Password', 'Azure Oauth']:
+    if credentials.method not in ['User/Password']:
         raise HTTPException(status_code=400, detail="Invalid connection method.")
     
     credentials_data = credentials.dict()
