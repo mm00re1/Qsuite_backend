@@ -119,6 +119,31 @@ async def all_functional_tests(
     except Exception as e:
         return {"success": False, "results": [], "message": "Kdb Error during retrieval of available q functions => " + str(e)}
 
+@router.get("/all_subscription_tests/")
+async def all_subscription_tests(
+    limit: int = 10,
+    group_id: Optional[UUID] = None,
+    db: Session = Depends(get_db)
+):
+    logger.info("all_subscription_tests")
+    if group_id is None:
+        raise HTTPException(status_code=400, detail="group_id is required")
+
+    # Query the TestGroup table to get the server, port, and tls values
+    test_group = db.query(TestGroup).filter(TestGroup.id == group_id.bytes).first()
+
+    if not test_group:
+        raise HTTPException(status_code=404, detail="TestGroup not found")
+
+    # Call sendKdbQuery with the fetched parameters
+    try:
+        TestNames = sendKdbQuery('.qsuite.showAllSubTests', test_group.server, test_group.port, test_group.tls, [])
+        TestNames = TestNames[:limit]
+        results = [x.decode('latin') for x in TestNames]
+        return {"success": True, "results": results, "message": ""}
+    except Exception as e:
+        return {"success": False, "results": [], "message": "Kdb Error during retrieval of available q sub functions => " + str(e)}
+
 @router.get("/view_test_code/")
 async def view_test_code(
     group_id: UUID,

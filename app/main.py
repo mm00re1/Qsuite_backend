@@ -7,7 +7,7 @@ from config.config import BASE_DIR
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from models.models import engine, Base
-from endpoints import view_dates, modify_test_cases, add_view_test_results, add_view_test_groups, search_tests, view_tests, run_q_code, connection_details
+from endpoints import view_dates, modify_test_cases, add_view_test_results, add_view_test_groups, search_tests, view_tests, run_q_code, connection_details, subscriptions
 #import secure
 from dependencies import PermissionsValidator, validate_token
 from encryption_utils import generate_key
@@ -105,7 +105,7 @@ if OAUTH_ACTIVE:
     app.include_router(view_tests.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
     app.include_router(run_q_code.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
     app.include_router(connection_details.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
-
+    app.include_router(subscriptions.router, dependencies=[Depends(PermissionsValidator(["read:test_data"]))])
 else:
     app.include_router(view_dates.router)
     app.include_router(modify_test_cases.router)
@@ -115,3 +115,4 @@ else:
     app.include_router(view_tests.router)
     app.include_router(run_q_code.router)
     app.include_router(connection_details.router)
+    app.include_router(subscriptions.router)
