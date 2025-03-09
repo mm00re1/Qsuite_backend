@@ -57,6 +57,7 @@ async def trade_sub_ws(websocket: WebSocket, db: Session = Depends(get_db)):
     kdb_host = test_group.server
     kdb_port = test_group.port
     kdb_tls = test_group.tls
+    kdb_scope = test_group.scope
 
     # Collect up to 8 generic params from query string
     extra_params = []
@@ -66,7 +67,7 @@ async def trade_sub_ws(websocket: WebSocket, db: Session = Depends(get_db)):
             extra_params.append(val)
 
     # Create the subscription thread with *args
-    qThread = kdbSub(sub_name, kdb_host, kdb_port, kdb_tls, *extra_params)
+    qThread = kdbSub(sub_name, kdb_host, kdb_port, kdb_tls, kdb_scope, *extra_params)
     qThread.start()
 
     keepalive_counter = 0

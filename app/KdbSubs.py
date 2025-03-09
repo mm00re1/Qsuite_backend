@@ -269,6 +269,7 @@ def run_subscription_test(
     kdb_host: str,
     kdb_port: int,
     kdb_tls: bool,
+    kdb_scope: str,
     sub_params: list,
     number_of_messages: int = 5,
     timeout_seconds: int = 10
@@ -278,7 +279,7 @@ def run_subscription_test(
     we have the requested number of messages or we've reached the timeout.
     Returns a dict with success, message, and collected data.
     """
-    q_thread = kdbSub(sub_name, kdb_host, kdb_port, kdb_tls, *sub_params)
+    q_thread = kdbSub(sub_name, kdb_host, kdb_port, kdb_tls, kdb_scope, *sub_params)
     q_thread.start()
 
     start_time = time.time()
