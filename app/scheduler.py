@@ -11,8 +11,9 @@ from uuid import UUID
 from models.models import engine, Base, TestGroup, TestCase, TestResult, SessionLocal
 from utils import parse_time_to_cron
 from config.config import BASE_DIR, CACHE_PATH
-from KdbSubs import sendFreeFormQuery, sendFunctionalQuery
+from KdbSubs import sendFreeFormQuery, sendFunctionalQuery, run_subscription_test
 from backup_db import perform_backup, cleanup_old_backups
+import json
 
 if os.getenv('DOCKER_ENV') == 'true':
     MAIN_URL = "http://main:8000"
@@ -121,11 +122,38 @@ def run_scheduled_test_group(test_group_id: UUID):
 
         for test_case in test_cases:
             start_time = datetime.utcnow()
-            if test_case.free_form:
+            if test_case.test_type == "Free-Form":
                 code_lines = test_case.test_code.split('\n\n')
-                result = sendFreeFormQuery(code_lines, test_group.server, test_group.port, test_group.tls)
-            else:  # test is a predefined q function
-                result = sendFunctionalQuery(test_case.test_code, test_group.server, test_group.port, test_group.tls)
+                result = sendFreeFormQuery(code_lines, test_group.server, test_group.port, test_group.tls, test_group.scope)
+
+            elif test_case.test_type == "Functional":  # test is a predefined q function
+                result = sendFunctionalQuery(test_case.test_code, test_group.server, test_group.port, test_group.tls, test_group.scope)
+
+            elif test_case.test_type == "Subscription":
+                # 'test_code' will be JSON with subscription params
+                try:
+                    config = json.loads(test_case.test_code)
+                except Exception:
+                    logger.error(f"Error running test case: {str(e)}")
+
+                sub_name = config.get("subscriptionTest", "defaultSub")
+                sub_params = config.get("subParams", [])
+                number_msgs = config.get("numberOfMessages", 5)
+                sub_timeout = config.get("subTimeout", 10)
+
+                # ints for > comparison in run_subscription_test
+                number_msgs =int(number_msgs)
+                sub_timeout = int(sub_timeout)
+
+                result = run_subscription_test(
+                    sub_name=sub_name,
+                    kdb_host=test_group.server,
+                    kdb_port=test_group.port,
+                    kdb_tls=test_group.tls,
+                    sub_params=sub_params,
+                    number_of_messages=number_msgs,
+                    timeout_seconds=sub_timeout
+                )
 
             time_taken = (datetime.utcnow() - start_time).total_seconds()
             if result["success"]:

@@ -211,7 +211,8 @@ async def get_test_result_summary(date: str, db: Session = Depends(get_db)):
             "Scheduled": group.schedule,
             "Passed": group_summary['passed'],
             "Failed": group_summary['failed'],
-            "TLS": group.tls
+            "TLS": group.tls,
+            "Scope": group.scope
         })
 
     column_list = ["Name", "Machine", "Port", "Scheduled", "Passed", "Failed", "TLS"]

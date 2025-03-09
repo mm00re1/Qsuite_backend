@@ -20,12 +20,11 @@ class TestCaseUpsert(BaseModel):
     group_id: UUID
     test_name: str
     test_code: str
-    free_form: bool
+    test_type: str  # "Functional", "Free-Form", or "Subscription"
     dependencies: List[UUID] = []
 
 @router.post("/upsert_test_case/")
 async def upsert_test_case(test_case: TestCaseUpsert, db: Session = Depends(get_db)):
-    logger.info("upsert_test_case")
     start_time = time.time()
 
     # Check if a test case with the same name already exists (excluding the current test case)
@@ -37,17 +36,17 @@ async def upsert_test_case(test_case: TestCaseUpsert, db: Session = Depends(get_
     if existing_name:
         raise HTTPException(status_code=400, detail="A test case with this name already exists")
 
+    # Attempt to find an existing test case by ID
     existing_test_case = db.get(TestCase, test_case.id.bytes)
 
     if existing_test_case:
         # Update existing test case
         existing_test_case.test_name = test_case.test_name
         existing_test_case.test_code = test_case.test_code
-        
+
         # Remove existing dependencies
         db.query(TestDependency).filter_by(test_id=existing_test_case.id).delete()
         message = "Test case edited successfully"
-
     else:
         # Create new test case
         existing_test_case = TestCase(
@@ -56,7 +55,7 @@ async def upsert_test_case(test_case: TestCaseUpsert, db: Session = Depends(get_
             test_name=test_case.test_name,
             test_code=test_case.test_code,
             creation_date=datetime.utcnow(),
-            free_form=test_case.free_form
+            test_type=test_case.test_type,
         )
         db.add(existing_test_case)
         message = "Test case added successfully"

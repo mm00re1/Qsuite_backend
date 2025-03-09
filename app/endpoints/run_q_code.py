@@ -27,7 +27,7 @@ async def execute_q_code(request: QCodeRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="TestGroup not found")
 
     try:
-        result = sendFreeFormQuery(request.code, test_group.server, test_group.port, test_group.tls)
+        result = sendFreeFormQuery(request.code, test_group.server, test_group.port, test_group.tls, test_group.scope)
         print(result)
         return result
 
@@ -49,7 +49,7 @@ async def execute_q_function(
         raise HTTPException(status_code=404, detail="TestGroup not found")
 
     try:
-        result = sendFunctionalQuery(test_name, test_group.server, test_group.port, test_group.tls)
+        result = sendFunctionalQuery(test_name, test_group.server, test_group.port, test_group.tls, test_group.scope)
         print(result)
         return result
 

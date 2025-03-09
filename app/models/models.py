@@ -9,6 +9,7 @@ engine = create_engine(SQLALCHEMY_DATABASE_URI, connect_args={"check_same_thread
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+
 class TestCase(Base):
     __tablename__ = 'test_case'
     id = Column(BLOB, primary_key=True, default=lambda: uuid.uuid4().bytes, index=True)
@@ -16,8 +17,10 @@ class TestCase(Base):
     test_name = Column(String(50), nullable=False)
     test_code = Column(Text, nullable=False)
     creation_date = Column(DateTime, default=datetime.utcnow)
-    free_form = Column(Boolean, default=True, nullable=False)
+    test_type = Column(String(20), nullable=False)
+    #free_form = Column(Boolean, default=True, nullable=False)
     group = relationship('TestGroup', backref='test_cases')
+
 
 class TestResult(Base):
     __tablename__ = 'test_result'
@@ -31,6 +34,7 @@ class TestResult(Base):
     pass_status = Column(Boolean, nullable=False)
     error_message = Column(Text, nullable=True)
 
+
 class TestGroup(Base):
     __tablename__ = 'test_group'
     id = Column(BLOB, primary_key=True, default=lambda: uuid.uuid4().bytes, index=True)
@@ -39,6 +43,8 @@ class TestGroup(Base):
     port = Column(Integer, nullable=False)
     schedule = Column(String(100), nullable=True)
     tls = Column(Boolean, nullable=False, default=False)
+    scope = Column(String(100), nullable=True)
+
 
 class TestDependency(Base):
     __tablename__ = 'test_dependency'

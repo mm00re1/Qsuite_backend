@@ -9,31 +9,88 @@ from encryption_utils import load_credentials
 import select
 import pandas as pd
 from qpython.qcollection import QDictionary
+import time
+from queue import Empty
 
 
 config = load_config()
 custom_ca = config['security']['custom_ca_path']
 
-def make_kdb_conn(host, port, tls, timeout):
+_conn_cache = {}
+MAX_CONN_AGE = 60 * 60
+
+def make_kdb_conn(host, port, tls, timeout, scope=""):
+    """
+    Creates or reuses a cached QConnection to KDB+.
+    Reuses if it's less than MAX_CONN_AGE old; otherwise creates a new QConnection.
+    """
+    global _conn_cache
+    key = (host, port, tls, scope)
+    now = time.time()
+
+    # If we have a cached connection, check whether it's still valid
+    if key in _conn_cache:
+        entry = _conn_cache[key]
+        age = now - entry["time_opened"]
+
+        # If age <= MAX_CONN_AGE, reuse existing QConnection
+        if age <= MAX_CONN_AGE:
+            return entry["conn"]
+        else:
+            # Otherwise, discard old connection and create a new one
+            try:
+                entry["conn"].close()  # Make sure it’s closed
+            except:
+                pass
+            del _conn_cache[key]
+
+    # We either have no cache entry or it was expired
     credentials = load_credentials()
     method = credentials.get('method')
+
     if method == 'User/Password':
-        username = credentials.get('username')
-        password = credentials.get('password')
-        return QConnection(host=host, port=port, username = username, password = password, tls_enabled=tls, timeout = timeout, custom_ca = custom_ca, pandas = True)
-    #elif method == 'Azure Oauth':
-        # add proper logic later
-        #client_id = credentials.get('client_id')
-        #client_secret = credentials.get('client_secret')
-        # Use client_id and client_secret to obtain token and connect
-        #return QConnection(host=host, port=port, tls_enabled=tls, timeout = 10, custom_ca = custom_ca)
+        q = QConnection(
+            host=host,
+            port=port,
+            username=credentials.get('username'),
+            password=credentials.get('password'),
+            tls_enabled=tls,
+            timeout=timeout,
+            custom_ca=custom_ca,
+            pandas=True
+        )
+    elif method == 'Azure Oauth':
+        oauth_config = {
+            'tenant_id': credentials.get('tenant_id'),
+            'client_id': credentials.get('client_id'),
+            'client_secret': credentials.get('client_secret'),
+            'scope': scope,
+            'flow': 'client_credentials',
+        }
+        q = QConnection(
+            host=host,
+            port=port,
+            username=credentials.get('username'),
+            tls_enabled=tls,
+            timeout=timeout,
+            custom_ca=custom_ca,
+            oauth_provider="azure",
+            oauth_config=oauth_config,
+            pandas=True
+        )
     else:
         raise ValueError("Unsupported connection method.")
-    # ....
+
+    # Store new connection in our cache
+    _conn_cache[key] = {
+        "conn": q,
+        "time_opened": now
+    }
+    return q
 
 
-def sendFreeFormQuery(code, host, port, tls):
-    q = make_kdb_conn(host, port, tls, 10)
+def sendFreeFormQuery(code, host, port, tls, scope = ""):
+    q = make_kdb_conn(host, port, tls, 10, scope)
     try:
         q.open()
         response = q.sendSync('.qsuite.executeUserCode', ''.join(code))
@@ -46,8 +103,8 @@ def sendFreeFormQuery(code, host, port, tls):
         q.close() 
 
 
-def sendFunctionalQuery(kdbFunction, host, port, tls):
-    q = make_kdb_conn(host, port, tls, 10)
+def sendFunctionalQuery(kdbFunction, host, port, tls, scope = ""):
+    q = make_kdb_conn(host, port, tls, 10, scope)
     try:
         q.open()
         response = q.sendSync('.qsuite.executeFunction', kdbFunction)
@@ -59,24 +116,24 @@ def sendFunctionalQuery(kdbFunction, host, port, tls):
     finally:
         q.close()
 
-def sendKdbQuery(kdbFunction, host, port, tls, *args):
-    q = make_kdb_conn(host, port, tls, 10)
+def sendKdbQuery(kdbFunction, host, port, tls, scope = "", *args):
+    q = make_kdb_conn(host, port, tls, 10, scope)
     q.open()
     res = q.sendSync(kdbFunction, *args)
     q.close()
     return res
 
-def test_kdb_conn(host, port, tls):
-    q = make_kdb_conn(host, port, tls, 5)
+def test_kdb_conn(host, port, tls, scope = ""):
+    q = make_kdb_conn(host, port, tls, 5, scope)
     q.open()
     q.close()
     #throws exception if it times out or port doesn't exist
     return "success"
 
 class kdbSub(threading.Thread):
-    def __init__(self, sub_name, host, port, tls, *args):
+    def __init__(self, sub_name, host, port, tls, scope = "", *args):
         super(kdbSub, self).__init__()
-        self.q = make_kdb_conn(host, port, tls, 10)
+        self.q = make_kdb_conn(host, port, tls, 10, scope)
         self.q.open()
         self.q.sendSync('.qsuite.subTests.' + sub_name, *args)
         self.message_queue = Queue()
@@ -207,3 +264,69 @@ def convert_value_to_str(val):
     return str(val)
 
 
+def run_subscription_test(
+    sub_name: str,
+    kdb_host: str,
+    kdb_port: int,
+    kdb_tls: bool,
+    sub_params: list,
+    number_of_messages: int = 5,
+    timeout_seconds: int = 10
+) -> dict:
+    """
+    Start a kdb subscription in a thread and gather messages until either
+    we have the requested number of messages or we've reached the timeout.
+    Returns a dict with success, message, and collected data.
+    """
+    q_thread = kdbSub(sub_name, kdb_host, kdb_port, kdb_tls, *sub_params)
+    q_thread.start()
+
+    start_time = time.time()
+    collected_messages = []
+    success = False
+
+    try:
+        while True:
+            # Check if we've hit the desired number_of_messages
+            if len(collected_messages) >= number_of_messages:
+                success = True
+                break
+
+            # Check if we've hit the timeout
+            if time.time() - start_time >= timeout_seconds:
+                # We can consider it a partial success or a fail, depending on your logic
+                success = False
+                break
+
+            # Try to get data from the queue
+            try:
+                msg = q_thread.message_queue.get_nowait()
+                collected_messages.append(msg)
+            except Empty:
+                pass
+
+            # If the thread signaled a stop (e.g., error or server closed)
+            if q_thread.stopped():
+                # Decide if that is success or fail. Possibly it ended early?
+                success = len(collected_messages) > 0
+                break
+
+            time.sleep(0.01)
+
+    except Exception as e:
+        print(f"Error running subscription: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}",
+            "data": []
+        }
+    finally:
+        # Always stop the thread if it's still running
+        q_thread.stopit()
+
+    return {
+        "success": success,
+        "message": f"Received {len(collected_messages)} messages."
+                   + (" Timeout reached." if not success else ""),
+        "data": collected_messages
+    }

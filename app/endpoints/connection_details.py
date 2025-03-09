@@ -17,8 +17,7 @@ class ConnectionCredentialsInput(BaseModel):
 @router.post("/store_credentials/")
 async def store_credentials(credentials: ConnectionCredentialsInput):
     # Validate input
-    print("storing credentials: ", credentials)
-    if credentials.method not in ['User/Password']:
+    if credentials.method not in ['User/Password', 'Azure Oauth']:
         raise HTTPException(status_code=400, detail="Invalid connection method.")
     
     credentials_data = credentials.dict()

@@ -30,26 +30,6 @@ def make_json_serializable(data):
     else:
         return data
 
-@router.get("/search_functional_tests/")
-async def search_functional_tests(
-    query: str,
-    limit: int = 10,
-    group_id: Optional[UUID] = None,
-    db: Session = Depends(get_db)
-):
-    # Query the TestGroup table to get the server, port, and tls values
-    test_group = db.query(TestGroup).filter(TestGroup.id == group_id.bytes).first()
-
-    if not test_group:
-        raise HTTPException(status_code=404, detail="TestGroup not found")
-
-    try:
-        matchingTestNames = sendKdbQuery('.qsuite.showMatchingTests', test_group.server, test_group.port, test_group.tls, query)
-        matchingTestNames = matchingTestNames[:limit]
-        results = [x.decode('latin') for x in matchingTestNames]
-        return {"success": True, "results": results, "message": ""}
-    except Exception as e:
-        return {"success": False, "results": [], "message": "Kdb Error while searching for matching q function => " + str(e)}
 
 @router.websocket("/live")
 async def trade_sub_ws(websocket: WebSocket, db: Session = Depends(get_db)):

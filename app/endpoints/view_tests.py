@@ -18,26 +18,32 @@ router = APIRouter()
 @router.get("/get_test_info/")
 async def get_test_info(
     date: str,
-    test_id: UUID,
+    test_result_id: UUID,
     db: Session = Depends(get_db)
 ):
     logger.info("get_test_info")
+
     try:
         specific_date = datetime.strptime(date, '%d-%m-%Y').date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format, should be DD-MM-YYYY")
 
-    test_case = db.query(TestCase).join(TestGroup).filter(TestCase.id == test_id.bytes).first()
+    # Step 1: Retrieve the TestResult to get the test_case_id
+    test_result = db.query(TestResult).filter(
+        TestResult.id == test_result_id.bytes,
+        TestResult.date_run == specific_date
+    ).first()
+
+    if not test_result:
+        raise HTTPException(status_code=404, detail="Test result not found")
+
+    # Step 2: Retrieve the TestCase using test_case_id from TestResult
+    test_case = db.query(TestCase).filter(TestCase.id == test_result.test_case_id).first()
 
     if not test_case:
         raise HTTPException(status_code=404, detail="Test case not found")
 
-    test_result = db.query(TestResult).filter(
-        TestResult.test_case_id == test_id.bytes,
-        TestResult.date_run == specific_date
-    ).first()
-
-    dependencies = db.query(TestDependency).filter(TestDependency.test_id == test_id.bytes).all()
+    dependencies = db.query(TestDependency).filter(TestDependency.test_id == test_case.id).all()
 
     dependent_tests = []
     for dep in dependencies:
@@ -56,7 +62,7 @@ async def get_test_info(
 
     last_30_days = datetime.utcnow() - timedelta(days=30)
     last_30_days_results = db.query(TestResult).filter(
-        TestResult.test_case_id == test_id.bytes,
+        TestResult.test_case_id == test_case.id,
         TestResult.date_run >= last_30_days
     ).order_by(TestResult.date_run).all()
 
@@ -69,7 +75,7 @@ async def get_test_info(
         'test_name': test_case.test_name,
         'test_code': test_case.test_code,
         'creation_date': test_case.creation_date,
-        'free_form': test_case.free_form,
+        'test_type': test_case.test_type,
         'group_id': test_case.group.id.hex(),
         'group_name': test_case.group.name,
         'dependent_tests': dependent_tests,
@@ -112,7 +118,7 @@ async def all_functional_tests(
 
     # Call sendKdbQuery with the fetched parameters
     try:
-        TestNames = sendKdbQuery('.qsuite.showAllTests', test_group.server, test_group.port, test_group.tls, [])
+        TestNames = sendKdbQuery('.qsuite.showAllTests', test_group.server, test_group.port, test_group.tls, test_group.scope, [])
         TestNames = TestNames[:limit]
         results = [x.decode('latin') for x in TestNames]
         return {"success": True, "results": results, "message": ""}
@@ -137,7 +143,7 @@ async def all_subscription_tests(
 
     # Call sendKdbQuery with the fetched parameters
     try:
-        TestNames = sendKdbQuery('.qsuite.showAllSubTests', test_group.server, test_group.port, test_group.tls, [])
+        TestNames = sendKdbQuery('.qsuite.showAllSubTests', test_group.server, test_group.port, test_group.tls, test_group.scope, [])
         TestNames = TestNames[:limit]
         results = [x.decode('latin') for x in TestNames]
         return {"success": True, "results": results, "message": ""}
@@ -159,7 +165,7 @@ async def view_test_code(
 
     # Call sendKdbQuery with the fetched parameters
     try:
-        test_code = sendKdbQuery('.qsuite.parseTestCode', test_group.server, test_group.port, test_group.tls, test_name)
+        test_code = sendKdbQuery('.qsuite.parseTestCode', test_group.server, test_group.port, test_group.tls, test_group.scope, test_name)
         results = test_code.decode('latin')
         return {"success": True, "results": results, "message": ""}
     except Exception as e:
@@ -201,7 +207,7 @@ async def get_test_ids(
                 'test_case_id': test.id.hex(),
                 'Test Name': test.test_name,
                 'Creation Date': test.creation_date,
-                'free_form': test.free_form,
+                'test_type': test.test_type,
                 'test_code': test.test_code,
                 'dependencies': dependency_map[test.id]
             })

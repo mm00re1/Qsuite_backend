@@ -119,7 +119,14 @@ async def search_functional_tests(
         raise HTTPException(status_code=404, detail="TestGroup not found")
 
     try:
-        matchingTestNames = sendKdbQuery('.qsuite.showMatchingTests', test_group.server, test_group.port, test_group.tls, query)
+        matchingTestNames = sendKdbQuery(
+                '.qsuite.showMatchingTests',
+                test_group.server,
+                test_group.port,
+                test_group.tls,
+                test_group.scope,
+                query
+        )
         matchingTestNames = matchingTestNames[:limit]
         results = [x.decode('latin') for x in matchingTestNames]
         return {"success": True, "results": results, "message": ""}
@@ -145,7 +152,14 @@ async def search_subscription_tests(
         raise HTTPException(status_code=404, detail="TestGroup not found")
 
     try:
-        matchingTestNames = sendKdbQuery('.qsuite.showMatchingSubTests', test_group.server, test_group.port, test_group.tls, query)
+        matchingTestNames = sendKdbQuery(
+                '.qsuite.showMatchingSubTests',
+                test_group.server,
+                test_group.port,
+                test_group.tls,
+                test_group.scope,
+                query
+        )
         matchingTestNames = matchingTestNames[:limit]
         results = [x.decode('latin') for x in matchingTestNames]
         return {"success": True, "results": results, "message": ""}

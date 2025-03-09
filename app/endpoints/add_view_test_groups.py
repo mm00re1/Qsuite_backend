@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 import logging
 from uuid import UUID
 
@@ -22,6 +22,7 @@ class ConnectionTest(BaseModel):
     server: str
     port: int
     tls: bool
+    scope: Optional[str] = None
 
 class TestGroupCreate(BaseModel):
     name: str
@@ -29,6 +30,7 @@ class TestGroupCreate(BaseModel):
     port: int
     schedule: Optional[str] = None
     tls: bool
+    scope: Optional[str] = None
 
 class TestGroupUpdate(BaseModel):
     name: Optional[str] = None
@@ -36,20 +38,33 @@ class TestGroupUpdate(BaseModel):
     port: Optional[int] = None
     schedule: Optional[str] = None
     tls: Optional[bool] = None
+    scope: Optional[str] = None
 
 @router.post("/test_kdb_connection/")
-async def test_kdb_connection(test_group: ConnectionTest, db: Session = Depends(get_db)):
+async def test_kdb_connection(
+    test_group: ConnectionTest,
+    db: Session = Depends(get_db)
+):
     logger.info("testing kdb connection")
     try:
-        # Assuming this function exists and tests the connection to kdb
-        result = test_kdb_conn(host=test_group.server, port=test_group.port, tls=test_group.tls)
+        # Pass the optional scope through to the kdb test function
+        result = test_kdb_conn(
+            host=test_group.server,
+            port=test_group.port,
+            tls=test_group.tls,
+            scope=test_group.scope
+        )
         return {"message": "success", "details": result}
     except Exception as e:
         return {"message": "failed", "details": str(e)}
 
 
 @router.post("/upsert_test_group/{group_id}/")
-async def upsert_test_group(group_id: UUID, test_group: TestGroupCreate, db: Session = Depends(get_db)):
+async def upsert_test_group(
+    group_id: UUID,
+    test_group: TestGroupCreate,
+    db: Session = Depends(get_db)
+):
     logger.info("upserting test group")
 
     # Check if another group with the same name already exists
@@ -58,13 +73,17 @@ async def upsert_test_group(group_id: UUID, test_group: TestGroupCreate, db: Ses
         TestGroup.id != group_id.bytes
     ).first()
     if existing_group_with_name:
-        raise HTTPException(status_code=400, detail="A test group with this name already exists")
+        raise HTTPException(
+            status_code=400,
+            detail="A test group with this name already exists"
+        )
 
     # Check if the group already exists
     existing_group = db.get(TestGroup, group_id.bytes)
     if existing_group:
         # Perform update logic
         logger.info(f"Editing existing test group with ID {group_id.hex}")
+
         if test_group.name is not None:
             existing_group.name = test_group.name
         if test_group.server is not None:
@@ -75,6 +94,8 @@ async def upsert_test_group(group_id: UUID, test_group: TestGroupCreate, db: Ses
             existing_group.schedule = test_group.schedule
         if test_group.tls is not None:
             existing_group.tls = test_group.tls
+        if test_group.scope is not None:
+            existing_group.scope = test_group.scope
 
         db.commit()
 
@@ -87,7 +108,8 @@ async def upsert_test_group(group_id: UUID, test_group: TestGroupCreate, db: Ses
             server=test_group.server,
             port=test_group.port,
             schedule=test_group.schedule,
-            tls=test_group.tls
+            tls=test_group.tls,
+            scope=test_group.scope
         )
         db.add(new_test_group)
         db.commit()
@@ -100,23 +122,30 @@ async def upsert_test_group(group_id: UUID, test_group: TestGroupCreate, db: Ses
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail="Failed to update scheduler")
     except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"Scheduler communication error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Scheduler communication error: {e}"
+        )
 
     return {"message": "Test group upserted successfully", "id": group_id.hex}
 
 
 @router.post("/add_test_group/")
-async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_db)):
+async def add_test_group(
+    test_group: TestGroupCreate,
+    db: Session = Depends(get_db)
+):
     logger.info("adding test group")
-    
-    # Use the provided UUID if it exists (e.g., in production)
+
+    # Create a new TestGroup
     new_test_group = TestGroup(
         id=test_group.id.bytes if test_group.id else uuid.uuid4().bytes,
         name=test_group.name,
         server=test_group.server,
         port=test_group.port,
         schedule=test_group.schedule,
-        tls=test_group.tls
+        tls=test_group.tls,
+        scope=test_group.scope
     )
     db.add(new_test_group)
     db.commit()
@@ -128,13 +157,22 @@ async def add_test_group(test_group: TestGroupCreate, db: Session = Depends(get_
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail="Failed to update scheduler")
     except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"Scheduler communication error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Scheduler communication error: {e}"
+        )
 
-    return {"message": "Test group added successfully", "id": new_test_group.id.hex()}
-
+    return {
+        "message": "Test group added successfully",
+        "id": new_test_group.id.hex()
+    }
 
 @router.put("/edit_test_group/{id}/")
-async def edit_test_group(id: UUID, test_group: TestGroupUpdate, db: Session = Depends(get_db)):
+async def edit_test_group(
+    id: UUID,
+    test_group: TestGroupUpdate,
+    db: Session = Depends(get_db)
+):
     logger.info("editing test group")
     test_group_obj = db.get(TestGroup, id.bytes)
     if not test_group_obj:
@@ -150,6 +188,8 @@ async def edit_test_group(id: UUID, test_group: TestGroupUpdate, db: Session = D
         test_group_obj.schedule = test_group.schedule
     if test_group.tls is not None:
         test_group_obj.tls = test_group.tls
+    if test_group.scope is not None:
+        test_group_obj.scope = test_group.scope
 
     db.commit()
 
@@ -159,7 +199,10 @@ async def edit_test_group(id: UUID, test_group: TestGroupUpdate, db: Session = D
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail="Failed to update scheduler")
     except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"Scheduler communication error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Scheduler communication error: {e}"
+        )
 
     return {"message": "Test group updated successfully"}
 
@@ -194,8 +237,10 @@ async def get_test_groups(db: Session = Depends(get_db)):
             "server": group.server,
             "port": group.port,
             "schedule": group.schedule,
-            "tls": group.tls
-        } for group in test_groups
+            "tls": group.tls,
+            "scope": group.scope  # Return scope if you want
+        }
+        for group in test_groups
     ]
     return groups_data
 
