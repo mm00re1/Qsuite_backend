@@ -18,30 +18,33 @@ router = APIRouter()
 @router.get("/get_test_info/")
 async def get_test_info(
     date: str,
-    test_result_id: UUID,
+    test_id: UUID,
+    test_result_id: Optional[UUID] = None,  # Make test_result_id optional
     db: Session = Depends(get_db)
 ):
-    logger.info("get_test_info")
+    logger.info(f"Fetching test info for test_id={test_id}, test_result_id={test_result_id}, date={date}")
 
+    # Parse the date
     try:
         specific_date = datetime.strptime(date, '%d-%m-%Y').date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format, should be DD-MM-YYYY")
 
-    # Step 1: Retrieve the TestResult to get the test_case_id
-    test_result = db.query(TestResult).filter(
-        TestResult.id == test_result_id.bytes,
-        TestResult.date_run == specific_date
-    ).first()
-
-    if not test_result:
-        raise HTTPException(status_code=404, detail="Test result not found")
-
-    # Step 2: Retrieve the TestCase using test_case_id from TestResult
-    test_case = db.query(TestCase).filter(TestCase.id == test_result.test_case_id).first()
-
+    # Step 1: Retrieve the TestCase (required)
+    test_case = db.query(TestCase).join(TestGroup).filter(TestCase.id == test_id.bytes).first()
     if not test_case:
         raise HTTPException(status_code=404, detail="Test case not found")
+
+    # Step 2: Retrieve the TestResult (optional)
+    test_result = None
+    if test_result_id:
+        test_result = db.query(TestResult).filter(
+            TestResult.id == test_result_id.bytes,
+            TestResult.date_run == specific_date,
+            TestResult.test_case_id == test_id.bytes  # Ensure it matches the test case
+        ).first()
+        if not test_result:
+            logger.warning(f"No test result found for test_result_id={test_result_id} on date={specific_date}")
 
     dependencies = db.query(TestDependency).filter(TestDependency.test_id == test_case.id).all()
 

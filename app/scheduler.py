@@ -150,6 +150,7 @@ def run_scheduled_test_group(test_group_id: UUID):
                     kdb_host=test_group.server,
                     kdb_port=test_group.port,
                     kdb_tls=test_group.tls,
+                    kdb_scope=test_group.scope,
                     sub_params=sub_params,
                     number_of_messages=number_msgs,
                     timeout_seconds=sub_timeout

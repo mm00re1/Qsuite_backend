@@ -172,6 +172,20 @@ class kdbSub(threading.Thread):
 
 
 ##utility functions##
+def clean_data(data):
+    # clean data recursively - replacing Nan or Inf with None
+    if isinstance(data, dict):
+        return {k: clean_data(v) for k, v in data.items()}
+    elif isindtance(data, list):
+        return [clean_data(v) for v in data]
+    elif isinstance(data, bytes):
+        return data.decode('utf-8')
+    elif isinstance(data, float) and (np.isnan(data) or np.isinf(data)):
+        return None
+    elif pd.isna(data):
+        return None
+    return data
+
 def parseKdbTableWithSymbols(table):
     bstr_cols = table.select_dtypes([object]).columns
     for i in bstr_cols:
@@ -185,7 +199,7 @@ def parse_dataframe(data):
     trimmed = len(data) > max_rows
     df_data = data.head(max_rows).to_dict(orient='records')
     df_columns = list(data.columns)
-    return {"columns": df_columns, "rows": df_data, "trimmed": trimmed, "num_rows": len(data)}
+    return {"columns": df_columns, "rows": clean_data(df_data), "trimmed": trimmed, "num_rows": len(data)}
 
 def parseResponse(data, err_message):
     #if result is a boolean
@@ -236,7 +250,7 @@ def parse_q_dictionary(qdict):
 
         output.append({"key": key_str, "value": val_str})
 
-    return output
+    return clean_data(output)
 
 def convert_value_to_str(val):
     """
