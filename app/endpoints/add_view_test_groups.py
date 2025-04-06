@@ -245,8 +245,13 @@ async def get_test_groups(db: Session = Depends(get_db)):
     return groups_data
 
 @router.get("/get_test_group_stats/")
-async def get_test_group_stats(date: str, group_id: Optional[UUID] = None, db: Session = Depends(get_db)):
-    logger.info("getting test group stats")
+async def get_test_group_stats(
+    date: str,
+    group_id: Optional[UUID] = None,
+    run_number: Optional[int] = None,  # New optional parameter
+    db: Session = Depends(get_db)
+):
+    logger.info(f"Getting test group stats for date={date}, group_id={group_id}, run_number={run_number}")
     try:
         specific_date = datetime.strptime(date, '%d-%m-%Y').date()
     except ValueError:
@@ -265,6 +270,10 @@ async def get_test_group_stats(date: str, group_id: Optional[UUID] = None, db: S
     if group_id:
         passed_count_query = passed_count_query.filter(TestCase.group_id == group_id.bytes)
         failed_count_query = failed_count_query.filter(TestCase.group_id == group_id.bytes)
+
+    if run_number is not None:
+        passed_count_query = passed_count_query.filter(TestResult.run_number == run_number)
+        failed_count_query = failed_count_query.filter(TestResult.run_number == run_number)
 
     passed_count = passed_count_query.scalar()
     failed_count = failed_count_query.scalar()

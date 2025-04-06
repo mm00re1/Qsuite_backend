@@ -3,11 +3,11 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
 import time
-from typing import List, Optional
+from typing import List
 import logging
 from uuid import UUID
 
-from models.models import TestGroup, TestCase, TestDependency
+from models.models import TestResult, TestCase, TestDependency
 from dependencies import get_db
 
 logger = logging.getLogger(__name__)
@@ -80,9 +80,11 @@ async def delete_test_case(test_case_id: UUID, db: Session = Depends(get_db)):
     start_time = time.time()
 
     test_case = db.get(TestCase, test_case_id.bytes)
-
     if not test_case:
         raise HTTPException(status_code=404, detail="Test case not found")
+
+    # Delete associated test results
+    db.query(TestResult).filter(TestResult.test_case_id == test_case_id.bytes).delete()
 
     # Delete associated dependencies
     db.query(TestDependency).filter(
@@ -94,5 +96,5 @@ async def delete_test_case(test_case_id: UUID, db: Session = Depends(get_db)):
     db.delete(test_case)
     db.commit()
 
-    print(f"Time taken to delete test case: {time.time() - start_time}")
+    logger.info(f"Time taken to delete test case: {time.time() - start_time}")
     return {"message": "Test case deleted successfully"}

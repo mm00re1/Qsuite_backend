@@ -18,6 +18,7 @@ async def get_tests_by_ids(
     test_ids: str,
     date: str,
     group_id: Optional[UUID] = None,
+    run_number: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     logger.info("get_tests_by_ids")
@@ -38,6 +39,9 @@ async def get_tests_by_ids(
         TestResult.date_run == specific_date,
         TestCase.id.in_(test_ids_list)
     )
+
+    if run_number is not None:
+        query = query.filter(TestResult.run_number == run_number)
 
     if group_id:
         query = query.filter(TestCase.group_id == group_id.bytes)

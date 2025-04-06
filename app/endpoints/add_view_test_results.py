@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, desc
 from sqlalchemy import select
@@ -13,10 +13,28 @@ from uuid import UUID
 from models.models import TestResult, TestCase, TestGroup
 from dependencies import get_db
 from config.config import PAGE_SIZE
+from KdbSubs import run_scheduled_test_group
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get("/get_test_progress/{test_group_id}")
+async def get_test_progress(test_group_id: UUID, date: str, run_number: int, db: Session = Depends(get_db)):
+    """Fetch the number of completed tests for a test group on a specific date and run number."""
+    try:
+        specific_date = datetime.strptime(date, '%d-%m-%Y').date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format, should be DD-MM-YYYY")
+
+    completed_tests = db.query(TestResult).filter(
+        TestResult.group_id == test_group_id.bytes,
+        TestResult.date_run == specific_date,
+        TestResult.run_number == run_number
+    ).count()
+
+    return {"completed_tests": completed_tests}
 
 
 @router.get("/get_test_results_30_days/")
@@ -59,9 +77,10 @@ async def get_test_results_by_day(
     group_id: UUID,
     page_number: int = 1,
     sortOption: str = "",
+    run_number: Optional[int] = None,  # New optional parameter
     db: Session = Depends(get_db)
 ):
-    logger.info("get_test_results_by_day")
+    logger.info(f"Get test results by day: date={date}, group_id={group_id}, run_number={run_number}")
     stTime = time.time()
 
     try:
@@ -74,6 +93,8 @@ async def get_test_results_by_day(
     )
     
     query = query.filter(TestCase.group_id == group_id.bytes)
+    if run_number is not None:
+        query = query.filter(TestResult.run_number == run_number)
 
     print("sort option: ", sortOption)
     print("page_number: ", page_number)
@@ -110,10 +131,11 @@ async def get_test_results_by_day(
 
     run_test_case_ids = db.query(TestResult.test_case_id).join(TestCase).filter(
         TestResult.date_run == specific_date
-    ).distinct()
+    )
+    if run_number is not None:
+        run_test_case_ids = run_test_case_ids.filter(TestResult.run_number == run_number)
 
-    run_test_case_ids = run_test_case_ids.filter(TestCase.group_id == group_id.bytes)
-
+    run_test_case_ids = run_test_case_ids.filter(TestCase.group_id == group_id.bytes).distinct()
     run_test_case_ids = run_test_case_ids.subquery()
     select_run_test_case_ids = select(run_test_case_ids.c.test_case_id)
 
@@ -220,3 +242,76 @@ async def get_test_result_summary(date: str, db: Session = Depends(get_db)):
 
     return {"groups_data": groups_data, "columnList": column_list}
 
+
+@router.get("/get_run_numbers_by_day/")
+async def get_run_numbers_by_day(
+    date: str,
+    group_id: UUID,
+    db: Session = Depends(get_db)
+):
+    logger.info(f"Get run numbers for date={date}, group_id={group_id}")
+    try:
+        specific_date = datetime.strptime(date, '%d-%m-%Y').date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format, should be DD-MM-YYYY")
+
+    # Query distinct run numbers for the given date and group
+    run_numbers = db.query(TestResult.run_number).join(TestCase).filter(
+        TestResult.date_run == specific_date,
+        TestCase.group_id == group_id.bytes
+    ).distinct().order_by(TestResult.run_number).all()
+
+    # Extract run numbers from the result (returns list of tuples)
+    run_number_list = [run_number[0] for run_number in run_numbers if run_number[0] is not None]
+
+    return {
+        "date": date,
+        "group_id": str(group_id),
+        "run_numbers": run_number_list
+    }
+
+
+@router.post("/execute_test_group/{test_group_id}")
+async def execute_test_group(test_group_id: UUID, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """Manually execute a test group immediately."""
+    logger.info(f"Manual execution requested for TestGroup ID: {test_group_id.hex}")
+
+    try:
+        test_group = db.query(TestGroup).filter(TestGroup.id == test_group_id.bytes).first()
+        if not test_group:
+            logger.error(f"TestGroup ID {test_group_id.hex} not found.")
+            raise HTTPException(status_code=404, detail="Test group not found")
+
+        # Determine the run_number: max existing for today + 1
+        current_date = datetime.utcnow().date()
+        max_run_number = db.query(func.max(TestResult.run_number)).filter(
+            TestResult.group_id == test_group_id.bytes,
+            TestResult.date_run == current_date
+        ).scalar() or 0
+        run_number = max_run_number + 1
+
+        # Get total number of tests
+        test_cases = db.query(TestCase).filter(TestCase.group_id == test_group_id.bytes).all()
+        total_tests = len(test_cases)
+
+        # Run the test group in the background
+        background_tasks.add_task(run_scheduled_test_group, test_group_id)
+
+        # Return the date, run number, and total tests
+        print("response!!!!")
+        res_dict = {
+            "message": f"Test group {test_group_id.hex} execution started",
+            "date": current_date.strftime('%d-%m-%Y'),
+            "run_number": run_number,
+            "total_tests": total_tests
+        }
+        print(res_dict)
+        return {
+            "message": f"Test group {test_group_id.hex} execution started",
+            "date": current_date.strftime('%d-%m-%Y'),
+            "run_number": run_number,
+            "total_tests": total_tests
+        }
+    except Exception as e:
+        logger.error(f"Error starting test group execution {test_group_id.hex}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start test group execution: {str(e)}")
